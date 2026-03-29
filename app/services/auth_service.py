@@ -6,6 +6,7 @@ import os
 import requests
 import base64
 from datetime import datetime, timedelta
+from urllib.parse import urlencode
 from cryptography.fernet import Fernet
 from flask import current_app
 
@@ -67,14 +68,39 @@ class AmazonOAuth:
         'A1VC38T7YXB528': 'Japan',
         'A19VAU5U5O7RUS': 'Singapore',
     }
+
+    SELLER_CENTRAL_URLS = {
+        'A2Q3Y263D00KWC': 'https://sellercentral.amazon.com.br',
+        'A2EUQ1WTGCTBG2': 'https://sellercentral.amazon.ca',
+        'A1AM78C64UM0Y8': 'https://sellercentral.amazon.com.mx',
+        'ATVPDKIKX0DER': 'https://sellercentral.amazon.com',
+        'A2VIGQ35RCS4UG': 'https://sellercentral.amazon.ae',
+        'A1PA6795UKMFR9': 'https://sellercentral-europe.amazon.com',
+        'ARBP9OOSHTCHU': 'https://sellercentral.amazon.eg',
+        'A1RKKUPIHCS9HS': 'https://sellercentral-europe.amazon.com',
+        'A13V1IB3VIYZZH': 'https://sellercentral-europe.amazon.com',
+        'A1F83G8C2ARO7P': 'https://sellercentral-europe.amazon.com',
+        'A21TJRUUN4KGV': 'https://sellercentral.amazon.in',
+        'APJ6JRA9NG5V4': 'https://sellercentral-europe.amazon.com',
+        'A1805IZSGTT6HS': 'https://sellercentral.amazon.nl',
+        'A17E79C6D8DWNP': 'https://sellercentral.amazon.pl',
+        'A2NODRKZP88ZB9': 'https://sellercentral.amazon.se',
+        'A33AVAJ2PDY3EV': 'https://sellercentral.amazon.com.tr',
+        'A39IBJ37TRP1C6': 'https://sellercentral.amazon.com.au',
+        'A1VC38T7YXB528': 'https://sellercentral.amazon.co.jp',
+        'A19VAU5U5O7RUS': 'https://sellercentral.amazon.sg',
+    }
     
     def __init__(self):
+        self.application_id = current_app.config.get('SPAPI_APPLICATION_ID')
         self.client_id = current_app.config.get('LWA_CLIENT_ID')
         self.client_secret = current_app.config.get('LWA_CLIENT_SECRET')
         self.redirect_uri = current_app.config.get('AMAZON_REDIRECT_URI')
+        self.login_uri = current_app.config.get('AMAZON_LOGIN_URI')
+        self.auth_version = current_app.config.get('SPAPI_AUTH_VERSION')
 
-    def _validate_oauth_config(self):
-        """Ensure OAuth configuration is present before building requests."""
+    def _validate_token_config(self):
+        """Ensure LWA token exchange configuration is present."""
         missing = [
             key for key, value in {
                 'LWA_CLIENT_ID': self.client_id,
@@ -84,41 +110,49 @@ class AmazonOAuth:
         ]
         if missing:
             raise Exception(f"Missing Amazon OAuth configuration: {', '.join(missing)}")
+
+    def _validate_authorization_config(self):
+        """Ensure website authorization workflow configuration is present."""
+        missing = [
+            key for key, value in {
+                'SPAPI_APPLICATION_ID': self.application_id,
+                'AMAZON_REDIRECT_URI': self.redirect_uri,
+            }.items() if not value
+        ]
+        if missing:
+            raise Exception(f"Missing Amazon authorization configuration: {', '.join(missing)}")
     
     def get_authorization_url(self, state=None, marketplace_id='A21TJRUUN4KGV'):
         """
-        Generate OAuth authorization URL
-        
-        Scopes needed:
-        - sellingpartnerapi::notifications (optional)
+        Generate Seller Central website authorization URL.
         """
-        self._validate_oauth_config()
-        # Basic scope - app must have these enabled in Developer Console
-        # Go to: Developer Central > Your App > App Settings > OAuth Login Scopes
-        scopes = [
-            'profile',  # Basic profile access
-            'sellingpartnerapi::read_product_catalog',  # Read products
-        ]
-        
-        params = {
-            'client_id': self.client_id,
-            'response_type': 'code',
-            'redirect_uri': self.redirect_uri,
-            'scope': ' '.join(scopes),
-        }
-        
+        self._validate_authorization_config()
+        seller_central_url = self.get_seller_central_url(marketplace_id)
+        params = {'application_id': self.application_id}
         if state:
             params['state'] = state
-        
-        # Build query string
-        query = '&'.join([f"{k}={requests.utils.quote(v)}" for k, v in params.items()])
-        return f"{self.AUTHORIZE_ENDPOINT}?{query}"
+        if self.auth_version:
+            params['version'] = self.auth_version
+
+        return f"{seller_central_url}/apps/authorize/consent?{urlencode(params)}"
+
+    def get_callback_redirect_url(self, amazon_callback_uri, amazon_state, state):
+        """Build redirect URL back to Amazon callback URI."""
+        self._validate_authorization_config()
+        params = {
+            'amazon_state': amazon_state,
+            'state': state,
+            'redirect_uri': self.redirect_uri,
+        }
+        if self.auth_version:
+            params['version'] = self.auth_version
+        return f"{amazon_callback_uri}?{urlencode(params)}"
     
     def exchange_code_for_tokens(self, code):
         """
         Exchange authorization code for access and refresh tokens
         """
-        self._validate_oauth_config()
+        self._validate_token_config()
         data = {
             'grant_type': 'authorization_code',
             'code': code,
@@ -142,7 +176,7 @@ class AmazonOAuth:
         """
         Refresh access token using refresh token
         """
-        self._validate_oauth_config()
+        self._validate_token_config()
         data = {
             'grant_type': 'refresh_token',
             'refresh_token': refresh_token,
@@ -208,3 +242,8 @@ class AmazonOAuth:
         # Default
         else:
             return 'us-east-1'
+
+    @staticmethod
+    def get_seller_central_url(marketplace_id):
+        """Get Seller Central URL for the given marketplace."""
+        return AmazonOAuth.SELLER_CENTRAL_URLS.get(marketplace_id, 'https://sellercentral.amazon.in')

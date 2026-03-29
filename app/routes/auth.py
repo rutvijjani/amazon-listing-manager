@@ -111,20 +111,38 @@ def logout():
 @bp.route('/amazon/connect')
 @login_required
 def amazon_connect():
-    """Redirect to Amazon OAuth authorization"""
+    """Handle SP-API website authorization workflow."""
     oauth = AmazonOAuth()
-    
-    # Store state in session for verification
+
+    # Step 2 of website authorization flow:
+    # Amazon calls our login URI with amazon_callback_uri + amazon_state.
+    amazon_callback_uri = request.args.get('amazon_callback_uri')
+    amazon_state = request.args.get('amazon_state')
+    selling_partner_id = request.args.get('selling_partner_id')
+    if amazon_callback_uri and amazon_state:
+        import secrets
+        state = secrets.token_urlsafe(32)
+        session['oauth_state'] = state
+        if selling_partner_id:
+            session['oauth_selling_partner_id'] = selling_partner_id
+        callback_url = oauth.get_callback_redirect_url(
+            amazon_callback_uri=amazon_callback_uri,
+            amazon_state=amazon_state,
+            state=state
+        )
+        return redirect(callback_url)
+
+    # Step 1 of website authorization flow:
+    # user clicks authorize from our app.
     import secrets
-    state = secrets.token_urlsafe(32)
-    session['oauth_state'] = state
-    
-    # Get marketplace from query param or default to India
+    initial_state = secrets.token_urlsafe(32)
+    session['oauth_init_state'] = initial_state
+
     marketplace_id = request.args.get('marketplace', 'A21TJRUUN4KGV')
     session['oauth_marketplace_id'] = marketplace_id
     session['oauth_marketplace_name'] = AmazonOAuth.get_marketplace_name(marketplace_id)
-    
-    auth_url = oauth.get_authorization_url(state=state, marketplace_id=marketplace_id)
+
+    auth_url = oauth.get_authorization_url(state=initial_state, marketplace_id=marketplace_id)
     return redirect(auth_url)
 
 
@@ -147,8 +165,8 @@ def amazon_callback():
         flash(f'Amazon authorization failed: {error_description}', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))
     
-    # Get authorization code
-    code = request.args.get('code')
+    # Get authorization code from SP-API website authorization workflow
+    code = request.args.get('spapi_oauth_code') or request.args.get('code')
     if not code:
         flash('Authorization code not received.', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))
@@ -162,6 +180,7 @@ def amazon_callback():
         marketplace_id = session.get('oauth_marketplace_id', 'A21TJRUUN4KGV')
         marketplace_name = session.get('oauth_marketplace_name', AmazonOAuth.get_marketplace_name(marketplace_id))
         expires_in = token_data.get('expires_in')
+        selling_partner_id = request.args.get('selling_partner_id') or session.get('oauth_selling_partner_id')
         
         # Deactivate existing connections
         collection = AmazonConnection.get_collection()
@@ -173,7 +192,7 @@ def amazon_callback():
         # Create new connection
         connection = AmazonConnection({
             'user_id': current_user.id,
-            'seller_id': 'pending',
+            'seller_id': selling_partner_id or 'pending',
             'marketplace_id': marketplace_id,
             'marketplace_name': marketplace_name,
             'refresh_token_encrypted': encryption.encrypt(token_data['refresh_token']),
@@ -185,8 +204,10 @@ def amazon_callback():
         
         # Clear OAuth state
         session.pop('oauth_state', None)
+        session.pop('oauth_init_state', None)
         session.pop('oauth_marketplace_id', None)
         session.pop('oauth_marketplace_name', None)
+        session.pop('oauth_selling_partner_id', None)
         
         flash('Amazon account connected successfully!', 'success')
         return redirect(url_for('dashboard.amazon_settings'))

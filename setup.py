@@ -84,10 +84,13 @@ AWS_REGION={aws_region}
 # Login with Amazon
 LWA_CLIENT_ID={lwa_client_id or 'your-client-id'}
 LWA_CLIENT_SECRET={lwa_client_secret or 'your-client-secret'}
+AMAZON_LOGIN_URI=http://localhost:5000/auth/amazon/connect
 
 # SP-API
 SP_API_ROLE_ARN={sp_api_role or 'your-role-arn'}
 AMAZON_REDIRECT_URI=http://localhost:5000/auth/amazon/callback
+SPAPI_APPLICATION_ID=your-application-id
+SPAPI_AUTH_VERSION=beta
 
 # Sandbox (Optional)
 SANDBOX_REFRESH_TOKEN={sandbox_token or ''}

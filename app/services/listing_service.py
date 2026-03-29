@@ -25,6 +25,10 @@ class ListingService:
         """
         self.user = user
         self.connection = user.get_active_connection()
+        if self.connection:
+            current_app.logger.info(f"ListingService: Connection found - Marketplace: {self.connection.marketplace_id}")
+        else:
+            current_app.logger.warning("ListingService: No active connection found")
         self.client = SPAPIClient(connection=self.connection) if self.connection else None
     
     def is_connected(self):

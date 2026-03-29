@@ -235,6 +235,49 @@ def amazon_disconnect():
     return redirect(url_for('dashboard.amazon_settings'))
 
 
+@bp.route('/amazon/direct-connect', methods=['POST'])
+@login_required
+def amazon_direct_connect():
+    """Connect account using a self-authorized refresh token."""
+    refresh_token = request.form.get('refresh_token', '').strip()
+    seller_id = request.form.get('seller_id', '').strip()
+    marketplace_id = request.form.get('marketplace_id', 'A21TJRUUN4KGV').strip()
+
+    if not refresh_token:
+        flash('Refresh token is required', 'danger')
+        return redirect(url_for('dashboard.amazon_settings'))
+
+    if not seller_id:
+        flash('Seller ID is required', 'danger')
+        return redirect(url_for('dashboard.amazon_settings'))
+
+    try:
+        encryption = TokenEncryption()
+        collection = AmazonConnection.get_collection()
+        collection.update_many(
+            {'user_id': current_user.id, 'is_active': True},
+            {'$set': {'is_active': False}}
+        )
+
+        connection = AmazonConnection({
+            'user_id': current_user.id,
+            'seller_id': seller_id,
+            'marketplace_id': marketplace_id,
+            'marketplace_name': AmazonOAuth.get_marketplace_name(marketplace_id),
+            'refresh_token_encrypted': encryption.encrypt(refresh_token),
+            'access_token_encrypted': None,
+            'token_expires_at': None,
+            'is_active': True,
+        })
+        connection.save()
+
+        flash('Amazon account connected successfully using refresh token.', 'success')
+    except Exception as e:
+        flash(f'Failed to connect Amazon account: {str(e)}', 'danger')
+
+    return redirect(url_for('dashboard.amazon_settings'))
+
+
 @bp.route('/amazon/update-seller-id', methods=['POST'])
 @login_required
 def update_seller_id():

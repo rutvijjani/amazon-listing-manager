@@ -137,6 +137,46 @@
                         <li>Return here and enter your Seller ID</li>
                     </ol>
                 </div>
+
+                <hr class="my-4">
+
+                <div class="card border-secondary">
+                    <div class="card-header bg-light">
+                        <i class="bi bi-key"></i> Connect Using Refresh Token
+                    </div>
+                    <div class="card-body">
+                        <p class="small text-muted mb-3">
+                            Recommended when your SP-API app is private/draft and you generated a self-authorization token
+                            from Seller Central or Solution Provider Portal.
+                        </p>
+                        <form method="POST" action="{{ url_for('auth.amazon_direct_connect') }}">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <div class="mb-3">
+                                <label class="form-label">Marketplace</label>
+                                <select class="form-select" name="marketplace_id" required>
+                                    {% for mp_id, mp_name in marketplaces.items() %}
+                                    <option value="{{ mp_id }}" {% if mp_id == 'A21TJRUUN4KGV' %}selected{% endif %}>
+                                        {{ mp_name }}
+                                    </option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Seller ID</label>
+                                <input type="text" class="form-control" name="seller_id" required
+                                       placeholder="Enter your Seller ID">
+                            </div>
+                            <div class="mb-3">
+                                <label class="form-label">Refresh Token</label>
+                                <textarea class="form-control" name="refresh_token" rows="4" required
+                                          placeholder="Paste the self-authorized SP-API refresh token here"></textarea>
+                            </div>
+                            <button type="submit" class="btn btn-dark">
+                                <i class="bi bi-plug"></i> Connect with Refresh Token
+                            </button>
+                        </form>
+                    </div>
+                </div>
                 {% endif %}
             </div>
         </div>

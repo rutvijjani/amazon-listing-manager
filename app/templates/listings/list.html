@@ -1,0 +1,151 @@
+{% extends 'base.html' %}
+
+{% block title %}Search Listings - Amazon Listing Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2><i class="bi bi-search"></i> Search Listings</h2>
+        <p class="text-muted">Search and find your Amazon product listings</p>
+    </div>
+</div>
+
+<!-- Search Form -->
+<div class="card mb-4">
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('listings.search') }}">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <select class="form-select" name="type">
+                        <option value="keyword" {% if search_type == 'keyword' %}selected{% endif %}>Keywords</option>
+                        <option value="asin" {% if search_type == 'asin' %}selected{% endif %}>ASIN(s)</option>
+                    </select>
+                </div>
+                <div class="col-md-7">
+                    <input type="text" class="form-control" name="q" 
+                           value="{{ query or '' }}" 
+                           placeholder="Enter keywords or ASINs (comma-separated for multiple)" required>
+                </div>
+                <div class="col-md-2">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Search
+                    </button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Search Results -->
+{% if items is defined %}
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <span>
+            <i class="bi bi-list"></i> Search Results 
+            <span class="badge bg-secondary">{{ items|length }} items</span>
+        </span>
+    </div>
+    <div class="card-body p-0">
+        {% if items %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 80px;">Image</th>
+                        <th>Product</th>
+                        <th>ASIN</th>
+                        <th>Brand</th>
+                        <th>Type</th>
+                        <th style="width: 150px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in items %}
+                    <tr>
+                        <td>
+                            {% if item.main_image %}
+                            <img src="{{ item.main_image }}" alt="{{ item.title }}" 
+                                 class="img-thumbnail" style="max-width: 60px; max-height: 60px;">
+                            {% else %}
+                            <div class="bg-secondary text-white text-center py-3 rounded">
+                                <i class="bi bi-image"></i>
+                            </div>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <strong>{{ item.title[:80] }}{% if item.title|length > 80 %}...{% endif %}</strong>
+                        </td>
+                        <td>
+                            <code>{{ item.asin }}</code>
+                        </td>
+                        <td>{{ item.brand }}</td>
+                        <td>
+                            <span class="badge bg-info">{{ item.product_type }}</span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('listings.item_detail', asin=item.asin) }}" 
+                               class="btn btn-sm btn-outline-primary">
+                                <i class="bi bi-eye"></i> View
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="text-center py-5">
+            <i class="bi bi-inbox fs-1 text-muted"></i>
+            <p class="mt-3 text-muted">No items found matching your search.</p>
+            <p class="small text-muted">Try different keywords or check your Amazon connection.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Quick Tips -->
+{% if not items %}
+<div class="row mt-4">
+    <div class="col-md-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <i class="bi bi-keyboard fs-1 text-primary"></i>
+                <h5 class="mt-3">Search by Keywords</h5>
+                <p class="text-muted small">Search products using keywords like "wireless headphones" or "yoga mat"</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <i class="bi bi-upc-scan fs-1 text-success"></i>
+                <h5 class="mt-3">Search by ASIN</h5>
+                <p class="text-muted small">Use ASIN mode to find specific products by their Amazon ID</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center h-100">
+            <div class="card-body">
+                <i class="bi bi-lightning fs-1 text-warning"></i>
+                <h5 class="mt-3">Bulk Operations</h5>
+                <p class="text-muted small">Use <a href="{{ url_for('listings.bulk_update') }}">Bulk Update</a> for multiple products</p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Auto-submit on Enter key
+document.querySelector('input[name="q"]').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        this.closest('form').submit();
+    }
+});
+</script>
+{% endblock %}

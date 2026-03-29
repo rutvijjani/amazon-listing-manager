@@ -1,0 +1,113 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ item.title[:50] }}... - Amazon Listing Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('listings.index') }}">Listings</a></li>
+                <li class="breadcrumb-item active">{{ item.asin }}</li>
+            </ol>
+        </nav>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Product Images -->
+    <div class="col-md-4 mb-4">
+        <div class="card">
+            {% if item.main_image %}
+            <img src="{{ item.main_image }}" class="card-img-top" alt="{{ item.title }}">
+            {% else %}
+            <div class="card-img-top bg-secondary text-white text-center py-5">
+                <i class="bi bi-image fs-1"></i>
+                <p class="mb-0">No Image</p>
+            </div>
+            {% endif %}
+            <div class="card-body">
+                <h6>ASIN: <code>{{ item.asin }}</code></h6>
+                <p class="text-muted small">Brand: {{ item.brand }}</p>
+                <p class="text-muted small">Type: {{ item.product_type }}</p>
+            </div>
+        </div>
+        
+        {% if item.images and item.images|length > 1 %}
+        <div class="card mt-3">
+            <div class="card-header">
+                <i class="bi bi-images"></i> Additional Images
+            </div>
+            <div class="card-body">
+                <div class="row g-2">
+                    {% for img in item.images %}
+                    {% if img.variant != 'MAIN' %}
+                    <div class="col-4">
+                        <img src="{{ img.link }}" class="img-thumbnail" alt="">
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+    
+    <!-- Product Details -->
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-info-circle"></i> Product Information
+            </div>
+            <div class="card-body">
+                <h4>{{ item.title }}</h4>
+                <hr>
+                
+                {% if item.description %}
+                <div class="mb-4">
+                    <h6>Description</h6>
+                    <p>{{ item.description }}</p>
+                </div>
+                {% endif %}
+                
+                {% if item.bullet_points %}
+                <div class="mb-4">
+                    <h6>Key Features</h6>
+                    <ul>
+                        {% for bullet in item.bullet_points %}
+                        <li>{{ bullet }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Actions -->
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-gear"></i> Actions
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6>Quick Update</h6>
+                        <p class="small text-muted">Update this product's listing on Amazon</p>
+                        <a href="{{ url_for('listings.edit', sku=item.asin) }}" class="btn btn-primary">
+                            <i class="bi bi-pencil"></i> Edit Listing
+                        </a>
+                    </div>
+                    <div class="col-md-6">
+                        <h6>View on Amazon</h6>
+                        <p class="small text-muted">Open product page on Amazon marketplace</p>
+                        <a href="https://www.amazon.in/dp/{{ item.asin }}" target="_blank" class="btn btn-outline-secondary">
+                            <i class="bi bi-box-arrow-up-right"></i> Open on Amazon
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

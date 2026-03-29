@@ -1,0 +1,155 @@
+{% extends 'base.html' %}
+
+{% block title %}Bulk Job Results - Amazon Listing Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('listings.bulk_update') }}">Bulk Update</a></li>
+                <li class="breadcrumb-item active">Job #{{ job.id }}</li>
+            </ol>
+        </nav>
+        <h2><i class="bi bi-bar-chart"></i> Bulk Job Results</h2>
+    </div>
+</div>
+
+<!-- Job Status Card -->
+<div class="card mb-4">
+    <div class="card-header">
+        <i class="bi bi-info-circle"></i> Job Information
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <p class="mb-1"><strong>Job Name:</strong></p>
+                <p>{{ job.job_name }}</p>
+            </div>
+            <div class="col-md-3">
+                <p class="mb-1"><strong>Status:</strong></p>
+                {% if job.status == 'COMPLETED' %}
+                <span class="badge bg-success fs-6">Completed</span>
+                {% elif job.status == 'COMPLETED_WITH_ERRORS' %}
+                <span class="badge bg-warning fs-6">Completed with Errors</span>
+                {% elif job.status == 'PROCESSING' %}
+                <span class="badge bg-primary fs-6">Processing</span>
+                {% elif job.status == 'FAILED' %}
+                <span class="badge bg-danger fs-6">Failed</span>
+                {% else %}
+                <span class="badge bg-secondary fs-6">{{ job.status }}</span>
+                {% endif %}
+            </div>
+            <div class="col-md-3">
+                <p class="mb-1"><strong>Started:</strong></p>
+                <p>{{ job.started_at.strftime('%Y-%m-%d %H:%M:%S') if job.started_at else '-' }}</p>
+            </div>
+            <div class="col-md-3">
+                <p class="mb-1"><strong>Completed:</strong></p>
+                <p>{{ job.completed_at.strftime('%Y-%m-%d %H:%M:%S') if job.completed_at else '-' }}</p>
+            </div>
+        </div>
+        
+        <!-- Progress Bar -->
+        <div class="mt-4">
+            <label class="form-label">Progress</label>
+            <div class="progress" style="height: 30px;">
+                {% set pct = (job.processed_records / job.total_records * 100) if job.total_records else 0 %}
+                <div class="progress-bar progress-bar-striped {% if job.status == 'PROCESSING' %}progress-bar-animated{% endif %}" 
+                     role="progressbar" 
+                     style="width: {{ pct }}%"
+                     aria-valuenow="{{ pct }}" aria-valuemin="0" aria-valuemax="100">
+                    {{ job.processed_records }} / {{ job.total_records }}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Results Summary -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card text-center border-success">
+            <div class="card-body">
+                <h1 class="text-success">{{ job.success_count }}</h1>
+                <p class="text-muted mb-0">Successful Updates</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center border-danger">
+            <div class="card-body">
+                <h1 class="text-danger">{{ job.failed_count }}</h1>
+                <p class="text-muted mb-0">Failed Updates</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card text-center border-info">
+            <div class="card-body">
+                <h1 class="text-info">{{ job.total_records }}</h1>
+                <p class="text-muted mb-0">Total Records</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Errors Table -->
+{% if job.get_errors() %}
+<div class="card">
+    <div class="card-header bg-danger text-white">
+        <i class="bi bi-exclamation-triangle"></i> Errors
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Row</th>
+                        <th>SKU</th>
+                        <th>Error Message</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for error in job.get_errors() %}
+                    <tr>
+                        <td>{{ error.row }}</td>
+                        <td><code>{{ error.sku or '-' }}</code></td>
+                        <td class="text-danger">{{ error.error }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Actions -->
+<div class="mt-4">
+    <a href="{{ url_for('listings.bulk_update') }}" class="btn btn-primary">
+        <i class="bi bi-arrow-left"></i> Back to Bulk Update
+    </a>
+    <a href="{{ url_for('listings.logs') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-journal-text"></i> View All Logs
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+{% if job.status == 'PROCESSING' %}
+<script>
+// Auto-refresh page while processing
+setInterval(function() {
+    fetch('/api/job-status/{{ job.id }}')
+        .then(response => response.json())
+        .then(data => {
+            if (data.status !== 'PROCESSING' && data.status !== 'PENDING') {
+                window.location.reload();
+            }
+        });
+}, 5000);
+</script>
+{% endif %}
+{% endblock %}

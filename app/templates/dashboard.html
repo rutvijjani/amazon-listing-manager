@@ -1,0 +1,237 @@
+{% extends 'base.html' %}
+
+{% block title %}Dashboard - Amazon Listing Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2><i class="bi bi-speedometer2"></i> Dashboard</h2>
+        <p class="text-muted">Welcome back, {{ current_user.name or current_user.email }}!</p>
+    </div>
+</div>
+
+<!-- Connection Status Alert -->
+{% if not has_connection %}
+<div class="alert alert-warning" role="alert">
+    <i class="bi bi-exclamation-triangle-fill"></i>
+    <strong>Amazon Account Not Connected!</strong> 
+    To start managing your listings:
+    <br><br>
+    <a href="{{ url_for('dashboard.amazon_settings') }}" class="btn btn-primary btn-sm">
+        <i class="bi bi-link"></i> Connect with OAuth
+    </a>
+    <a href="{{ url_for('sandbox.auto_connect') }}" class="btn btn-success btn-sm ms-2">
+        <i class="bi bi-lightning-fill"></i> Quick Sandbox Connect
+    </a>
+</div>
+{% else %}
+<div class="alert alert-success" role="alert">
+    <i class="bi bi-check-circle-fill"></i>
+    <strong>Connected:</strong> {{ connection.marketplace_name }} 
+    (Seller ID: {{ connection.seller_id }})
+</div>
+{% endif %}
+
+<!-- Stats Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card bg-primary text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Total Updates</h6>
+                        <h3 class="mb-0">{{ stats.total_updates }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-arrow-repeat fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Successful</h6>
+                        <h3 class="mb-0">{{ stats.successful_updates }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-check-circle fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Failed</h6>
+                        <h3 class="mb-0">{{ stats.failed_updates }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-x-circle fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-warning text-dark">
+            <div class="card-body">
+                <div class="d-flex justify-content-between">
+                    <div>
+                        <h6 class="card-title">Pending</h6>
+                        <h3 class="mb-0">{{ stats.pending_updates }}</h3>
+                    </div>
+                    <div class="align-self-center">
+                        <i class="bi bi-clock fs-1"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Quick Actions -->
+    <div class="col-md-4 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-lightning-fill"></i> Quick Actions
+            </div>
+            <div class="card-body">
+                <div class="list-group">
+                    <a href="{{ url_for('listings.index') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-search"></i> Search Listings
+                    </a>
+                    <a href="{{ url_for('listings.bulk_update') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-upload"></i> Bulk Update via CSV
+                    </a>
+                    <a href="{{ url_for('dashboard.amazon_settings') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-gear"></i> Amazon Settings
+                    </a>
+                    <a href="{{ url_for('listings.logs') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-journal-text"></i> View Update Logs
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Recent Activity -->
+    <div class="col-md-8 mb-4">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-clock-history"></i> Recent Activity</span>
+                <a href="{{ url_for('listings.logs') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body p-0">
+                {% if recent_logs %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Time</th>
+                                <th>ASIN/SKU</th>
+                                <th>Operation</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for log in recent_logs %}
+                            <tr>
+                                <td>{{ log.created_at.strftime('%Y-%m-%d %H:%M') if log.created_at else '-' }}</td>
+                                <td>{{ log.asin or log.sku or '-' }}</td>
+                                <td>
+                                    <span class="badge bg-secondary">{{ log.operation }}</span>
+                                </td>
+                                <td>
+                                    {% if log.status == 'SUCCESS' %}
+                                    <span class="badge bg-success">Success</span>
+                                    {% elif log.status == 'FAILED' %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% else %}
+                                    <span class="badge bg-warning">Pending</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5 text-muted">
+                    <i class="bi bi-inbox fs-1"></i>
+                    <p class="mt-2">No activity yet. Start by searching your listings!</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Bulk Jobs -->
+{% if recent_jobs %}
+<div class="row">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-collection"></i> Recent Bulk Jobs
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Job Name</th>
+                                <th>Status</th>
+                                <th>Progress</th>
+                                <th>Results</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for job in recent_jobs %}
+                            <tr>
+                                <td>{{ job.job_name }}</td>
+                                <td>
+                                    {% if job.status == 'COMPLETED' %}
+                                    <span class="badge bg-success">Completed</span>
+                                    {% elif job.status == 'PROCESSING' %}
+                                    <span class="badge bg-primary">Processing</span>
+                                    {% elif job.status == 'FAILED' %}
+                                    <span class="badge bg-danger">Failed</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">{{ job.status }}</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <div class="progress" style="height: 20px;">
+                                        {% set pct = (job.processed_records / job.total_records * 100) if job.total_records else 0 %}
+                                        <div class="progress-bar" role="progressbar" style="width: {{ pct }}%">
+                                            {{ job.processed_records }}/{{ job.total_records }}
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-success">{{ job.success_count }} success</span>
+                                    {% if job.failed_count > 0 %}
+                                    <span class="text-danger">, {{ job.failed_count }} failed</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

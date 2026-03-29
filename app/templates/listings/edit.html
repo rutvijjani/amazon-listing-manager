@@ -1,0 +1,219 @@
+{% extends 'base.html' %}
+
+{% block title %}Edit Listing - {{ sku }} - Amazon Listing Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <nav aria-label="breadcrumb">
+            <ol class="breadcrumb">
+                <li class="breadcrumb-item"><a href="{{ url_for('dashboard.index') }}">Dashboard</a></li>
+                <li class="breadcrumb-item"><a href="{{ url_for('listings.index') }}">Listings</a></li>
+                <li class="breadcrumb-item active">Edit {{ sku }}</li>
+            </ol>
+        </nav>
+        <h2><i class="bi bi-pencil-square"></i> Edit Listing</h2>
+        <p class="text-muted">SKU: <code>{{ sku }}</code></p>
+    </div>
+</div>
+
+<div class="row">
+    <!-- Current Listing Info -->
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-info-circle"></i> Current Information
+            </div>
+            <div class="card-body">
+                {% if listing.title %}
+                <h6>{{ listing.title[:100] }}{% if listing.title|length > 100 %}...{% endif %}</h6>
+                <hr>
+                {% endif %}
+                
+                <table class="table table-sm table-borderless">
+                    {% if listing.asin %}
+                    <tr>
+                        <td><strong>ASIN:</strong></td>
+                        <td><code>{{ listing.asin }}</code></td>
+                    </tr>
+                    {% endif %}
+                    <tr>
+                        <td><strong>SKU:</strong></td>
+                        <td><code>{{ listing.sku }}</code></td>
+                    </tr>
+                    {% if listing.price and listing.price.price %}
+                    <tr>
+                        <td><strong>Price:</strong></td>
+                        <td>{{ listing.price.price }} {{ listing.price.currency }}</td>
+                    </tr>
+                    {% endif %}
+                    {% if listing.inventory and listing.inventory.quantity is not none %}
+                    <tr>
+                        <td><strong>Inventory:</strong></td>
+                        <td>{{ listing.inventory.quantity }} units</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Channel:</strong></td>
+                        <td>
+                            {% if listing.inventory.channel == 'AMAZON' %}
+                            <span class="badge bg-warning">FBA</span>
+                            {% else %}
+                            <span class="badge bg-secondary">FBM</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% if listing.status %}
+                    <tr>
+                        <td><strong>Status:</strong></td>
+                        <td>
+                            {% for status in listing.status %}
+                            <span class="badge bg-success">{{ status }}</span>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                </table>
+                
+                {% if listing.issues %}
+                <div class="alert alert-warning">
+                    <h6><i class="bi bi-exclamation-triangle"></i> Issues:</h6>
+                    <ul class="mb-0 small">
+                        {% for issue in listing.issues %}
+                        <li>{{ issue.message }}</li>
+                        {% endfor %}
+                    </ul>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    
+    <!-- Update Forms -->
+    <div class="col-md-8">
+        <!-- Price Update -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-currency-dollar"></i> Update Price
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('listings.edit', sku=sku) }}">
+                    <input type="hidden" name="update_type" value="price">
+                    
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Price</label>
+                            <input type="number" class="form-control" name="price" 
+                                   step="0.01" min="0" 
+                                   value="{{ listing.price.price if listing.price else '' }}"
+                                   placeholder="0.00" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Currency</label>
+                            <select class="form-select" name="currency">
+                                <option value="INR" selected>INR</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EUR</option>
+                                <option value="GBP">GBP</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Sale Price (Optional)</label>
+                            <input type="number" class="form-control" name="sale_price" 
+                                   step="0.01" min="0" placeholder="0.00">
+                        </div>
+                        <div class="col-md-1 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary w-100">
+                                <i class="bi bi-check-lg"></i>
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Inventory Update -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-box-seam"></i> Update Inventory
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('listings.edit', sku=sku) }}">
+                    <input type="hidden" name="update_type" value="inventory">
+                    
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Quantity</label>
+                            <input type="number" class="form-control" name="quantity" 
+                                   min="0" 
+                                   value="{{ listing.inventory.quantity if listing.inventory else '' }}"
+                                   placeholder="0" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Fulfillment Channel</label>
+                            <select class="form-select" name="fulfillment_channel">
+                                <option value="DEFAULT" 
+                                    {% if listing.inventory and listing.inventory.channel == 'DEFAULT' %}selected{% endif %}>
+                                    FBM (Merchant Fulfilled)
+                                </option>
+                                <option value="AMAZON"
+                                    {% if listing.inventory and listing.inventory.channel == 'AMAZON' %}selected{% endif %}>
+                                    FBA (Amazon Fulfilled)
+                                </option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary">
+                                <i class="bi bi-check-lg"></i> Update Inventory
+                            </button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+        
+        <!-- Content Update -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-file-text"></i> Update Content
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('listings.edit', sku=sku) }}">
+                    <input type="hidden" name="update_type" value="content">
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Product Title</label>
+                        <input type="text" class="form-control" name="title" 
+                               maxlength="200"
+                               value="{{ listing.title or '' }}"
+                               placeholder="Enter product title">
+                        <div class="form-text">Maximum 200 characters</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="4"
+                                  placeholder="Enter product description">{{ listing.description or '' }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Bullet Points (one per line, max 5)</label>
+                        <textarea class="form-control" name="bullet_points" rows="5"
+                                  placeholder="Enter bullet points, one per line">{{ '\n'.join(listing.bullet_points) if listing.bullet_points else '' }}</textarea>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Search Terms (comma-separated)</label>
+                        <input type="text" class="form-control" name="search_terms" 
+                               placeholder="keyword1, keyword2, keyword3">
+                    </div>
+                    
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i> Update Content
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

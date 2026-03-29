@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+
+{% block title %}Amazon Settings - Amazon Listing Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2><i class="bi bi-gear"></i> Amazon Settings</h2>
+        <p class="text-muted">Manage your Amazon Seller account connection</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <!-- Connection Status Card -->
+        <div class="card mb-4">
+            <div class="card-header bg-primary text-white">
+                <i class="bi bi-link-45deg"></i> Connection Status
+            </div>
+            <div class="card-body">
+                {% if connection and connection.is_active %}
+                <div class="alert alert-success">
+                    <i class="bi bi-check-circle-fill"></i> 
+                    <strong>Connected!</strong> Your Amazon account is linked.
+                </div>
+                
+                <table class="table table-borderless">
+                    <tr>
+                        <td><strong>Marketplace:</strong></td>
+                        <td>{{ connection.marketplace_name }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Marketplace ID:</strong></td>
+                        <td><code>{{ connection.marketplace_id }}</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Seller ID:</strong></td>
+                        <td>
+                            <code>{{ connection.seller_id }}</code>
+                            {% if connection.seller_id == 'pending' %}
+                            <span class="badge bg-warning ms-2">Update Required</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Connected On:</strong></td>
+                        <td>{{ connection.created_at.strftime('%Y-%m-%d %H:%M') if connection.created_at else '-' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Last Updated:</strong></td>
+                        <td>{{ connection.updated_at.strftime('%Y-%m-%d %H:%M') if connection.updated_at else '-' }}</td>
+                    </tr>
+                </table>
+                
+                <hr>
+                
+                <!-- Update Seller ID Form -->
+                {% if connection.seller_id == 'pending' %}
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle-fill"></i>
+                    Please enter your Amazon Seller ID to complete the setup.
+                </div>
+                {% endif %}
+                
+                <form method="POST" action="{{ url_for('auth.update_seller_id') }}" class="mb-3">
+                    <div class="input-group">
+                        <span class="input-group-text">Seller ID</span>
+                        <input type="text" class="form-control" name="seller_id" 
+                               value="{{ connection.seller_id if connection.seller_id != 'pending' else '' }}"
+                               placeholder="Enter your Amazon Seller ID" required>
+                        <button type="submit" class="btn btn-primary">Update</button>
+                    </div>
+                    <div class="form-text">
+                        Your Seller ID can be found in Amazon Seller Central under Settings &gt; Account Info
+                    </div>
+                </form>
+                
+                <hr>
+                
+                <!-- Disconnect Button -->
+                <form method="POST" action="{{ url_for('auth.amazon_disconnect') }}" 
+                      onsubmit="return confirm('Are you sure you want to disconnect your Amazon account?');">
+                    <button type="submit" class="btn btn-danger">
+                        <i class="bi bi-link-break"></i> Disconnect Amazon Account
+                    </button>
+                </form>
+                
+                {% else %}
+                <div class="alert alert-warning">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                    <strong>Not Connected!</strong> Choose a connection method:
+                </div>
+                
+                <!-- Sandbox Quick Connect -->
+                <div class="card border-success mb-4">
+                    <div class="card-header bg-success text-white">
+                        <i class="bi bi-lightning-fill"></i> Quick Sandbox Connect (Recommended for Testing)
+                    </div>
+                    <div class="card-body">
+                        <p>No OAuth required! Use your downloaded sandbox credentials directly.</p>
+                        <ol>
+                            <li>Add credentials to <code>.env</code> file</li>
+                            <li>Click connect button below</li>
+                        </ol>
+                        <a href="{{ url_for('sandbox.auto_connect') }}" class="btn btn-success">
+                            <i class="bi bi-lightning-fill"></i> Auto-Connect Sandbox
+                        </a>
+                    </div>
+                </div>
+                
+                <hr class="my-4">
+                
+                <h5>Or Connect via OAuth:</h5>
+                <p class="text-muted">Select your marketplace:</p>
+                <div class="row">
+                    {% for mp_id, mp_name in marketplaces.items() %}
+                    <div class="col-md-4 mb-2">
+                        <a href="{{ url_for('auth.amazon_connect', marketplace=mp_id) }}" 
+                           class="btn btn-outline-primary w-100">
+                            {{ mp_name }}
+                            {% if mp_id == 'A21TJRUUN4KGV' %}
+                            <span class="badge bg-success ms-1">IN</span>
+                            {% endif %}
+                        </a>
+                    </div>
+                    {% endfor %}
+                </div>
+                
+                <div class="mt-4">
+                    <h6>How to connect:</h6>
+                    <ol>
+                        <li>Click on your marketplace button above</li>
+                        <li>Login with your Amazon Seller credentials</li>
+                        <li>Authorize this application</li>
+                        <li>Return here and enter your Seller ID</li>
+                    </ol>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- Setup Instructions Card -->
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-info-circle"></i> Setup Instructions
+            </div>
+            <div class="card-body">
+                <h6>Prerequisites:</h6>
+                <ul>
+                    <li>Active Amazon Seller Central account</li>
+                    <li>Professional selling plan (for API access)</li>
+                    <li>Amazon SP-API application registered (for production)</li>
+                </ul>
+                
+                <h6>Required Credentials:</h6>
+                <p>This application needs the following environment variables configured:</p>
+                <ul>
+                    <li><code>LWA_CLIENT_ID</code> - Login with Amazon Client ID</li>
+                    <li><code>LWA_CLIENT_SECRET</code> - Login with Amazon Client Secret</li>
+                    <li><code>AWS_ACCESS_KEY_ID</code> - AWS IAM User Access Key</li>
+                    <li><code>AWS_SECRET_ACCESS_KEY</code> - AWS IAM User Secret Key</li>
+                    <li><code>SP_API_ROLE_ARN</code> - IAM Role ARN for SP-API</li>
+                </ul>
+                
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i>
+                    For development/testing, update the <code>.env</code> file with your credentials.
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Sidebar -->
+    <div class="col-md-4">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-question-circle"></i> Need Help?
+            </div>
+            <div class="card-body">
+                <h6>Common Issues:</h6>
+                <ul class="small">
+                    <li>
+                        <strong>Invalid Seller ID:</strong> 
+                        Check Seller Central &gt; Settings &gt; Account Info
+                    </li>
+                    <li>
+                        <strong>Access Denied:</strong> 
+                        Ensure your AWS IAM role has SP-API permissions
+                    </li>
+                    <li>
+                        <strong>Token Expired:</strong> 
+                        Tokens refresh automatically, but re-connect if issues persist
+                    </li>
+                </ul>
+                
+                <hr>
+                
+                <h6>Supported Marketplaces:</h6>
+                <p class="small text-muted">
+                    This app supports all Amazon marketplaces including India (Amazon.in), 
+                    USA, UK, Canada, and many more.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

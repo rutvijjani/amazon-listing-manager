@@ -1,0 +1,229 @@
+{% extends 'base.html' %}
+
+{% block title %}Manual Update - Amazon Listing Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col">
+        <h2><i class="bi bi-sliders"></i> Manual Listing Update</h2>
+        <p class="text-muted">Start with ASIN or SKU, then update only the attributes you select.</p>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header bg-dark text-white">
+        <i class="bi bi-search"></i> Find Listing
+    </div>
+    <div class="card-body">
+        <form method="GET" action="{{ url_for('listings.manual_update') }}">
+            <div class="row g-3">
+                <div class="col-md-5">
+                    <label class="form-label">ASIN</label>
+                    <input type="text" class="form-control" name="asin" value="{{ asin or '' }}" placeholder="B0XXXXXXXX">
+                </div>
+                <div class="col-md-5">
+                    <label class="form-label">Seller SKU</label>
+                    <input type="text" class="form-control" name="sku" value="{{ sku or '' }}" placeholder="Your seller SKU">
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">
+                        <i class="bi bi-search"></i> Load
+                    </button>
+                </div>
+            </div>
+            <div class="form-text mt-2">
+                ASIN helps you identify the product, but Amazon updates are applied on seller SKU.
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-header bg-info text-white">
+                <i class="bi bi-info-circle"></i> Loaded Product
+            </div>
+            <div class="card-body">
+                {% set product = listing if listing else catalog_item %}
+                {% if product %}
+                <table class="table table-sm table-borderless mb-0">
+                    <tr>
+                        <td><strong>ASIN:</strong></td>
+                        <td><code>{{ asin or product.asin or 'N/A' }}</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>SKU:</strong></td>
+                        <td><code>{{ sku or product.sku or 'Enter manually' }}</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>Title:</strong></td>
+                        <td>{{ product.title or 'Untitled product' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Brand:</strong></td>
+                        <td>{{ product.brand or 'Unknown' }}</td>
+                    </tr>
+                </table>
+                {% else %}
+                <p class="text-muted mb-0">Load an ASIN or SKU to start manual updates.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-8">
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-currency-dollar"></i> Price Update
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('listings.manual_update') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="update_type" value="price">
+                    <input type="hidden" name="asin" value="{{ asin or '' }}">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Seller SKU</label>
+                            <input type="text" class="form-control" name="sku" value="{{ sku or '' }}" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Price</label>
+                            <input type="number" class="form-control" name="price" step="0.01" min="0" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Currency</label>
+                            <select class="form-select" name="currency">
+                                <option value="INR">INR</option>
+                                <option value="USD">USD</option>
+                                <option value="EUR">EUR</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label">Sale Price</label>
+                            <input type="number" class="form-control" name="sale_price" step="0.01" min="0">
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-3">Update Price</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-header">
+                <i class="bi bi-box-seam"></i> Inventory Update
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('listings.manual_update') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="update_type" value="inventory">
+                    <input type="hidden" name="asin" value="{{ asin or '' }}">
+                    <div class="row g-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Seller SKU</label>
+                            <input type="text" class="form-control" name="sku" value="{{ sku or '' }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Quantity</label>
+                            <input type="number" class="form-control" name="quantity" min="0" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Fulfillment Channel</label>
+                            <select class="form-select" name="fulfillment_channel">
+                                <option value="DEFAULT">FBM</option>
+                                <option value="AMAZON">FBA</option>
+                            </select>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn btn-primary mt-3">Update Inventory</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-file-text"></i> Content Update
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('listings.manual_update') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="update_type" value="content">
+                    <input type="hidden" name="asin" value="{{ asin or '' }}">
+
+                    <div class="mb-3">
+                        <label class="form-label">Seller SKU</label>
+                        <input type="text" class="form-control" name="sku" value="{{ sku or '' }}" required>
+                    </div>
+
+                    <label class="form-label">Select Content Attributes</label>
+                    <div class="row g-2 mb-3">
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input content-field" type="checkbox" name="content_fields" value="title" id="field-title">
+                                <label class="form-check-label" for="field-title">Title</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input content-field" type="checkbox" name="content_fields" value="description" id="field-description">
+                                <label class="form-check-label" for="field-description">Description</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input content-field" type="checkbox" name="content_fields" value="bullet_points" id="field-bullets">
+                                <label class="form-check-label" for="field-bullets">Bullet Points</label>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="form-check">
+                                <input class="form-check-input content-field" type="checkbox" name="content_fields" value="search_terms" id="field-search-terms">
+                                <label class="form-check-label" for="field-search-terms">Search Terms</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 content-input" data-field="title">
+                        <label class="form-label">Title</label>
+                        <input type="text" class="form-control" name="title" value="{{ (listing.title if listing else catalog_item.title) if (listing or catalog_item) else '' }}">
+                    </div>
+
+                    <div class="mb-3 content-input" data-field="description">
+                        <label class="form-label">Description</label>
+                        <textarea class="form-control" name="description" rows="4">{{ listing.description if listing and listing.description else (catalog_item.description if catalog_item and catalog_item.description else '') }}</textarea>
+                    </div>
+
+                    <div class="mb-3 content-input" data-field="bullet_points">
+                        <label class="form-label">Bullet Points</label>
+                        <textarea class="form-control" name="bullet_points" rows="5">{{ '\n'.join(listing.bullet_points) if listing and listing.bullet_points else ('\n'.join(catalog_item.bullet_points) if catalog_item and catalog_item.bullet_points else '') }}</textarea>
+                    </div>
+
+                    <div class="mb-3 content-input" data-field="search_terms">
+                        <label class="form-label">Search Terms</label>
+                        <input type="text" class="form-control" name="search_terms" placeholder="keyword1, keyword2, keyword3">
+                    </div>
+
+                    <button type="submit" class="btn btn-primary">Update Selected Attributes</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function syncContentFields() {
+    const selected = new Set(Array.from(document.querySelectorAll('.content-field:checked')).map((el) => el.value));
+    document.querySelectorAll('.content-input').forEach((el) => {
+        el.classList.toggle('d-none', !selected.has(el.dataset.field));
+    });
+}
+
+document.querySelectorAll('.content-field').forEach((el) => {
+    el.addEventListener('change', syncContentFields);
+});
+
+syncContentFields();
+</script>
+{% endblock %}

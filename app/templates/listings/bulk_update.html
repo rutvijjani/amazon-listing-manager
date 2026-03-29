@@ -28,6 +28,47 @@
                             <option value="content">Content Update</option>
                         </select>
                     </div>
+
+                    <div class="mb-3">
+                        <label for="identifier_type" class="form-label">Primary Identifier</label>
+                        <select class="form-select" id="identifier_type" name="identifier_type" required>
+                            <option value="sku">SKU</option>
+                            <option value="asin">ASIN</option>
+                        </select>
+                        <div class="form-text">
+                            ASIN mode still requires a <code>sku</code> column, because Amazon listing updates are applied on seller SKU.
+                        </div>
+                    </div>
+
+                    <div class="mb-3 d-none" id="content-fields-box">
+                        <label class="form-label">Content Attributes To Update</label>
+                        <div class="row g-2">
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="content_fields" value="title" id="bulk-field-title">
+                                    <label class="form-check-label" for="bulk-field-title">Title</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="content_fields" value="description" id="bulk-field-description">
+                                    <label class="form-check-label" for="bulk-field-description">Description</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="content_fields" value="bullet_points" id="bulk-field-bullets">
+                                    <label class="form-check-label" for="bulk-field-bullets">Bullet Points</label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" name="content_fields" value="search_terms" id="bulk-field-search-terms">
+                                    <label class="form-check-label" for="bulk-field-search-terms">Search Terms</label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     
                     <div class="mb-3">
                         <label for="csv_file" class="form-label">CSV File</label>
@@ -91,7 +132,8 @@
                 <h6>CSV Format Requirements:</h6>
                 <ul class="small">
                     <li>First row must contain column headers</li>
-                    <li>SKU column is required for all types</li>
+                    <li>SKU column is required for all updates</li>
+                    <li>For ASIN mode, include both <code>asin</code> and <code>sku</code> columns</li>
                     <li>Use UTF-8 encoding for special characters</li>
                     <li>Maximum 10,000 rows per file</li>
                 </ul>
@@ -99,7 +141,10 @@
                 <h6 class="mt-3">Column Descriptions:</h6>
                 <dl class="small">
                     <dt>sku</dt>
-                    <dd>Your seller SKU (required)</dd>
+                    <dd>Your seller SKU (required for every update)</dd>
+
+                    <dt>asin</dt>
+                    <dd>Amazon ASIN (optional in SKU mode, required in ASIN mode)</dd>
                     
                     <dt>price</dt>
                     <dd>Product price (for price updates)</dd>
@@ -195,25 +240,46 @@
 document.getElementById('operation_type').addEventListener('change', function() {
     const preview = document.getElementById('format-preview');
     const type = this.value;
+    const identifierType = document.getElementById('identifier_type').value;
+    const contentFieldsBox = document.getElementById('content-fields-box');
+
+    contentFieldsBox.classList.toggle('d-none', type !== 'content');
     
     if (type === 'price') {
-        preview.innerHTML = `
+        preview.innerHTML = identifierType === 'asin' ? `
+            <code class="d-block mb-2">asin,sku,price,currency,sale_price</code>
+            <small class="text-muted">B0XXXXXXX,SKU001,999.00,INR,899.00</small><br>
+            <small class="text-muted">B0YYYYYYY,SKU002,1499.00,INR,</small>
+        ` : `
             <code class="d-block mb-2">sku,price,currency,sale_price</code>
             <small class="text-muted">SKU001,999.00,INR,899.00</small><br>
             <small class="text-muted">SKU002,1499.00,INR,</small>
         `;
     } else if (type === 'inventory') {
-        preview.innerHTML = `
+        preview.innerHTML = identifierType === 'asin' ? `
+            <code class="d-block mb-2">asin,sku,quantity,fulfillment_channel</code>
+            <small class="text-muted">B0XXXXXXX,SKU001,100,DEFAULT</small><br>
+            <small class="text-muted">B0YYYYYYY,SKU002,50,AMAZON</small>
+        ` : `
             <code class="d-block mb-2">sku,quantity,fulfillment_channel</code>
             <small class="text-muted">SKU001,100,DEFAULT</small><br>
             <small class="text-muted">SKU002,50,AMAZON</small>
         `;
     } else if (type === 'content') {
-        preview.innerHTML = `
-            <code class="d-block mb-2">sku,title,description,bullet_points</code>
-            <small class="text-muted">SKU001,Product Title,Description,Point 1|Point 2|Point 3</small>
+        preview.innerHTML = identifierType === 'asin' ? `
+            <code class="d-block mb-2">asin,sku,title,description,bullet_points,search_terms</code>
+            <small class="text-muted">B0XXXXXXX,SKU001,Product Title,Description,Point 1|Point 2,new keyword|another keyword</small>
+        ` : `
+            <code class="d-block mb-2">sku,title,description,bullet_points,search_terms</code>
+            <small class="text-muted">SKU001,Product Title,Description,Point 1|Point 2,new keyword|another keyword</small>
         `;
     }
 });
+
+document.getElementById('identifier_type').addEventListener('change', function() {
+    document.getElementById('operation_type').dispatchEvent(new Event('change'));
+});
+
+document.getElementById('operation_type').dispatchEvent(new Event('change'));
 </script>
 {% endblock %}

@@ -16,6 +16,27 @@ from app.models import UpdateLog, BulkUpdateJob
 bp = Blueprint('listings', __name__)
 
 
+def _build_content_payload(form, selected_fields):
+    """Build content update payload for only the selected fields."""
+    data = {}
+    normalized_fields = set(selected_fields or [])
+
+    if 'title' in normalized_fields:
+        data['title'] = form.get('title', '').strip()
+    if 'description' in normalized_fields:
+        data['description'] = form.get('description', '').strip()
+    if 'bullet_points' in normalized_fields:
+        data['bullet_points'] = [
+            bp.strip() for bp in form.get('bullet_points', '').split('\n') if bp.strip()
+        ]
+    if 'search_terms' in normalized_fields:
+        data['search_terms'] = [
+            term.strip() for term in form.get('search_terms', '').split(',') if term.strip()
+        ]
+
+    return data
+
+
 @bp.route('/')
 @login_required
 def index():
@@ -136,6 +157,87 @@ def edit(sku):
     return render_template('listings/edit.html', listing=listing, sku=sku)
 
 
+@bp.route('/manual-update', methods=['GET', 'POST'])
+@login_required
+def manual_update():
+    """Manual single-item update, starting from SKU or ASIN."""
+    service = ListingService(current_user)
+
+    if not service.is_connected():
+        flash('Please connect your Amazon account first', 'warning')
+        return redirect(url_for('dashboard.amazon_settings'))
+
+    asin = request.values.get('asin', '').strip()
+    sku = request.values.get('sku', '').strip()
+    listing = {}
+    catalog_item = None
+
+    if sku:
+        try:
+            listing = service.get_listing_by_sku(sku)
+            asin = asin or (listing.get('asin') or '')
+        except Exception as e:
+            flash(f'Could not load listing by SKU: {str(e)}', 'warning')
+            listing = {'sku': sku, 'asin': asin}
+
+    if asin and not listing.get('title'):
+        try:
+            catalog_item = service.get_item_details(asin)
+        except Exception as e:
+            flash(f'Could not load catalog item by ASIN: {str(e)}', 'warning')
+
+    if request.method == 'POST':
+        update_type = request.form.get('update_type')
+        sku = request.form.get('sku', '').strip()
+        asin = request.form.get('asin', '').strip()
+
+        if not sku:
+            flash('Seller SKU is required for updates, even when you start from ASIN.', 'danger')
+            return render_template(
+                'listings/manual_update.html',
+                listing=listing,
+                catalog_item=catalog_item,
+                sku=sku,
+                asin=asin,
+            )
+
+        try:
+            if update_type == 'price':
+                price = float(request.form.get('price', 0))
+                currency = request.form.get('currency', 'INR')
+                sale_price = request.form.get('sale_price', '').strip()
+                sale_price = float(sale_price) if sale_price else None
+                service.update_price(sku, price, currency, sale_price)
+                flash('Price updated successfully!', 'success')
+
+            elif update_type == 'inventory':
+                quantity = int(request.form.get('quantity', 0))
+                channel = request.form.get('fulfillment_channel', 'DEFAULT')
+                service.update_inventory(sku, quantity, channel)
+                flash('Inventory updated successfully!', 'success')
+
+            elif update_type == 'content':
+                selected_fields = request.form.getlist('content_fields')
+                if not selected_fields:
+                    raise Exception('Select at least one content attribute to update')
+                data = _build_content_payload(request.form, selected_fields)
+                service.update_content(sku, data)
+                flash('Selected content attributes updated successfully!', 'success')
+
+            return redirect(url_for('listings.manual_update', sku=sku, asin=asin))
+        except Exception as e:
+            current_app.logger.exception("Manual listing update failed")
+            flash(f'Update failed: {str(e)}', 'danger')
+
+    return render_template(
+        'listings/manual_update.html',
+        listing=listing,
+        catalog_item=catalog_item,
+        sku=sku,
+        asin=asin,
+    )
+
+
 @bp.route('/bulk-update', methods=['GET', 'POST'])
 @login_required
 def bulk_update():
@@ -158,6 +260,8 @@ def bulk_update():
             return redirect(url_for('listings.bulk_update'))
         
         operation_type = request.form.get('operation_type', 'price')
+        identifier_type = request.form.get('identifier_type', 'sku')
+        content_fields = request.form.getlist('content_fields')
         
         try:
             # Read CSV
@@ -167,6 +271,10 @@ def bulk_update():
             
             if not csv_data:
                 flash('CSV file is empty', 'danger')
+                return redirect(url_for('listings.bulk_update'))
+
+            if operation_type == 'content' and not content_fields:
+                flash('Select at least one content attribute for bulk content update', 'danger')
                 return redirect(url_for('listings.bulk_update'))
             
             # Create bulk job
@@ -183,9 +291,20 @@ def bulk_update():
             
             for i, row in enumerate(csv_data):
                 try:
-                    sku = row.get('sku')
+                    asin = (row.get('asin') or '').strip()
+                    sku = (row.get('sku') or '').strip()
+
+                    if identifier_type == 'asin' and not asin:
+                        errors.append({'row': i+1, 'error': 'ASIN is required'})
+                        failed_count += 1
+                        continue
+
                     if not sku:
-                        errors.append({'row': i+1, 'error': 'SKU is required'})
+                        errors.append({
+                            'row': i+1,
+                            'asin': asin or None,
+                            'error': 'SKU is required because Amazon listing updates are seller-SKU based'
+                        })
                         failed_count += 1
                         continue
                     
@@ -205,16 +324,26 @@ def bulk_update():
                         )
                     
                     elif operation_type == 'content':
-                        service.update_content(sku, {
-                            'title': row.get('title'),
-                            'description': row.get('description'),
-                            'bullet_points': row.get('bullet_points', '').split('|') if row.get('bullet_points') else None
-                        })
+                        data = {}
+                        if 'title' in content_fields:
+                            data['title'] = (row.get('title') or '').strip()
+                        if 'description' in content_fields:
+                            data['description'] = (row.get('description') or '').strip()
+                        if 'bullet_points' in content_fields:
+                            data['bullet_points'] = [bp.strip() for bp in (row.get('bullet_points') or '').split('|') if bp.strip()]
+                        if 'search_terms' in content_fields:
+                            data['search_terms'] = [term.strip() for term in (row.get('search_terms') or '').split('|') if term.strip()]
+                        service.update_content(sku, data)
                     
                     success_count += 1
                     
                 except Exception as e:
-                    errors.append({'row': i+1, 'sku': row.get('sku'), 'error': str(e)})
+                    errors.append({
+                        'row': i+1,
+                        'asin': row.get('asin'),
+                        'sku': row.get('sku'),
+                        'error': str(e)
+                    })
                     failed_count += 1
             
             # Update job status

@@ -1,11 +1,10 @@
 """
-Dashboard Routes
+Dashboard Routes for MongoDB
 """
 
-from flask import Blueprint, render_template, request, flash
+from flask import Blueprint, render_template
 from flask_login import login_required, current_user
-from app.services.listing_service import ListingService
-from app.models import UpdateLog, BulkUpdateJob
+from app.models import User, UpdateLog, BulkUpdateJob
 
 bp = Blueprint('dashboard', __name__)
 
@@ -13,28 +12,28 @@ bp = Blueprint('dashboard', __name__)
 @bp.route('/')
 @login_required
 def index():
-    """Main dashboard"""
+    """Main dashboard for MongoDB"""
     # Check if user has Amazon connection
     has_connection = current_user.has_amazon_connection()
     connection = current_user.get_active_connection()
     
     # Get recent activity
-    recent_logs = UpdateLog.query.filter_by(user_id=current_user.id)\
-        .order_by(UpdateLog.created_at.desc())\
-        .limit(10).all()
+    recent_logs = UpdateLog.get_recent_by_user(current_user.id, limit=10)
     
     # Get stats
+    collection = UpdateLog.get_collection()
     stats = {
-        'total_updates': UpdateLog.query.filter_by(user_id=current_user.id).count(),
-        'successful_updates': UpdateLog.query.filter_by(user_id=current_user.id, status='SUCCESS').count(),
-        'failed_updates': UpdateLog.query.filter_by(user_id=current_user.id, status='FAILED').count(),
-        'pending_updates': UpdateLog.query.filter_by(user_id=current_user.id, status='PENDING').count(),
+        'total_updates': collection.count_documents({'user_id': current_user.id}),
+        'successful_updates': collection.count_documents({'user_id': current_user.id, 'status': 'SUCCESS'}),
+        'failed_updates': collection.count_documents({'user_id': current_user.id, 'status': 'FAILED'}),
+        'pending_updates': collection.count_documents({'user_id': current_user.id, 'status': 'PENDING'}),
     }
     
     # Get recent bulk jobs
-    recent_jobs = BulkUpdateJob.query.filter_by(user_id=current_user.id)\
-        .order_by(BulkUpdateJob.created_at.desc())\
-        .limit(5).all()
+    jobs_collection = BulkUpdateJob.get_collection()
+    recent_jobs = list(jobs_collection.find(
+        {'user_id': current_user.id}
+    ).sort('created_at', -1).limit(5))
     
     return render_template('dashboard.html',
                          has_connection=has_connection,

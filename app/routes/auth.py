@@ -1,12 +1,14 @@
 """
-Authentication Routes
+Authentication Routes for MongoDB
 """
 
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from urllib.parse import urlparse
-from app import db
+from datetime import datetime
+
+from app import mongo
 from app.models import User, AmazonConnection
 from app.services.auth_service import AmazonOAuth, TokenEncryption
 
@@ -15,7 +17,7 @@ bp = Blueprint('auth', __name__)
 
 @bp.route('/register', methods=['GET', 'POST'])
 def register():
-    """User registration"""
+    """User registration for MongoDB"""
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
     
@@ -37,7 +39,8 @@ def register():
             errors.append('Passwords do not match')
         
         # Check if email exists
-        if User.query.filter_by(email=email).first():
+        existing_user = User.find_by_email(email)
+        if existing_user:
             errors.append('Email already registered')
         
         if errors:
@@ -46,21 +49,23 @@ def register():
             return render_template('auth/register.html', email=email, name=name)
         
         # Create user
-        user = User(email=email, name=name)
-        user.set_password(password)
-        
-        db.session.add(user)
-        db.session.commit()
-        
-        flash('Registration successful! Please log in.', 'success')
-        return redirect(url_for('auth.login'))
+        try:
+            user = User({'email': email, 'name': name})
+            user.set_password(password)
+            user.save()
+            
+            flash('Registration successful! Please log in.', 'success')
+            return redirect(url_for('auth.login'))
+        except Exception as e:
+            flash(f'Registration failed: {str(e)}', 'danger')
+            return render_template('auth/register.html', email=email, name=name)
     
     return render_template('auth/register.html')
 
 
 @bp.route('/login', methods=['GET', 'POST'])
 def login():
-    """User login"""
+    """User login for MongoDB"""
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
     
@@ -69,7 +74,7 @@ def login():
         password = request.form.get('password', '')
         remember = bool(request.form.get('remember'))
         
-        user = User.query.filter_by(email=email).first()
+        user = User.find_by_email(email)
         
         if user and user.check_password(password):
             if not user.is_active:
@@ -151,39 +156,31 @@ def amazon_callback():
         oauth = AmazonOAuth()
         token_data = oauth.exchange_code_for_tokens(code)
         
-        # Get seller information
-        # Note: In production, you might want to make an API call to get seller details
-        # For now, we'll store the tokens and let the user provide seller ID
-        
         encryption = TokenEncryption()
         
-        # Deactivate any existing connections
-        AmazonConnection.query.filter_by(user_id=current_user.id, is_active=True).update({
-            'is_active': False
-        })
-        
-        # Create new connection
-        # Note: seller_id should ideally come from SP-API after token exchange
-        # For now, we'll use a placeholder that the user can update
-        connection = AmazonConnection(
-            user_id=current_user.id,
-            seller_id='pending',  # Will be updated when first API call is made
-            marketplace_id='A21TJRUUN4KGV',  # Default to India
-            marketplace_name='Amazon.in',
-            refresh_token_encrypted=encryption.encrypt(token_data['refresh_token']),
-            access_token_encrypted=encryption.encrypt(token_data.get('access_token')),
-            is_active=True
+        # Deactivate existing connections
+        collection = AmazonConnection.get_collection()
+        collection.update_many(
+            {'user_id': current_user.id, 'is_active': True},
+            {'$set': {'is_active': False}}
         )
         
-        db.session.add(connection)
-        db.session.commit()
+        # Create new connection
+        connection = AmazonConnection({
+            'user_id': current_user.id,
+            'seller_id': 'pending',
+            'marketplace_id': 'A21TJRUUN4KGV',
+            'marketplace_name': 'Amazon.in',
+            'refresh_token_encrypted': encryption.encrypt(token_data['refresh_token']),
+            'access_token_encrypted': encryption.encrypt(token_data.get('access_token')),
+            'is_active': True
+        })
+        connection.save()
         
         # Clear OAuth state
         session.pop('oauth_state', None)
         
         flash('Amazon account connected successfully!', 'success')
-        
-        # Redirect to settings to complete setup (enter seller ID)
         return redirect(url_for('dashboard.amazon_settings'))
         
     except Exception as e:
@@ -195,11 +192,13 @@ def amazon_callback():
 @login_required
 def amazon_disconnect():
     """Disconnect Amazon account"""
-    connection = current_user.get_active_connection()
+    collection = AmazonConnection.get_collection()
+    result = collection.update_many(
+        {'user_id': current_user.id, 'is_active': True},
+        {'$set': {'is_active': False}}
+    )
     
-    if connection:
-        connection.is_active = False
-        db.session.commit()
+    if result.modified_count > 0:
         flash('Amazon account disconnected.', 'info')
     else:
         flash('No Amazon account connected.', 'warning')
@@ -217,20 +216,15 @@ def update_seller_id():
         flash('Seller ID is required', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))
     
-    connection = current_user.get_active_connection()
-    if connection:
-        connection.seller_id = seller_id
-        db.session.commit()
+    collection = AmazonConnection.get_collection()
+    result = collection.find_one_and_update(
+        {'user_id': current_user.id, 'is_active': True},
+        {'$set': {'seller_id': seller_id, 'updated_at': datetime.utcnow()}}
+    )
+    
+    if result:
         flash('Seller ID updated successfully', 'success')
     else:
         flash('No active Amazon connection found', 'danger')
     
     return redirect(url_for('dashboard.amazon_settings'))
-
-
-# Load user for Flask-Login
-from app import login_manager
-
-@login_manager.user_loader
-def load_user(user_id):
-    return User.query.get(int(user_id))

@@ -1,19 +1,19 @@
 """
-Amazon Listing Manager - Flask Application Factory
+Amazon Listing Manager - Flask Application Factory (MongoDB Version)
 """
 
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager
+from flask_pymongo import PyMongo
 from dotenv import load_dotenv
 import os
 
 # Initialize extensions
-db = SQLAlchemy()
+mongo = PyMongo()
 login_manager = LoginManager()
 
 def create_app(config_name=None):
-    """Application factory pattern"""
+    """Application factory pattern for MongoDB"""
     
     # Load environment variables
     load_dotenv()
@@ -22,26 +22,19 @@ def create_app(config_name=None):
     
     # Configuration
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///app.db')
-    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
     
-    # Amazon SP-API Config
-    app.config['AWS_ACCESS_KEY_ID'] = os.getenv('AWS_ACCESS_KEY_ID')
-    app.config['AWS_SECRET_ACCESS_KEY'] = os.getenv('AWS_SECRET_ACCESS_KEY')
-    app.config['AWS_REGION'] = os.getenv('AWS_REGION', 'us-east-1')
-    app.config['LWA_CLIENT_ID'] = os.getenv('LWA_CLIENT_ID')
-    app.config['LWA_CLIENT_SECRET'] = os.getenv('LWA_CLIENT_SECRET')
-    app.config['SP_API_ROLE_ARN'] = os.getenv('SP_API_ROLE_ARN')
-    app.config['AMAZON_REDIRECT_URI'] = os.getenv('AMAZON_REDIRECT_URI', 'http://localhost:5000/auth/amazon/callback')
-    app.config['TOKEN_ENCRYPTION_KEY'] = os.getenv('TOKEN_ENCRYPTION_KEY')
-    
-    # Sandbox Direct Credentials (optional - for testing without OAuth)
-    app.config['SANDBOX_REFRESH_TOKEN'] = os.getenv('SANDBOX_REFRESH_TOKEN')
-    app.config['SANDBOX_SELLER_ID'] = os.getenv('SANDBOX_SELLER_ID')
-    app.config['SANDBOX_MARKETPLACE_ID'] = os.getenv('SANDBOX_MARKETPLACE_ID', 'A21TJRUUN4KGV')
+    # MongoDB Configuration
+    mongo_uri = os.getenv('MONGODB_URI')
+    if mongo_uri:
+        app.config['MONGO_URI'] = mongo_uri
+        print(f"✅ Using MongoDB Atlas")
+    else:
+        # Fallback to local MongoDB or SQLite
+        app.config['MONGO_URI'] = 'mongodb://localhost:27017/amazon_listing_manager'
+        print(f"⚠️ Using local MongoDB")
     
     # Initialize extensions
-    db.init_app(app)
+    mongo.init_app(app)
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Please log in to access this page.'
@@ -60,8 +53,22 @@ def create_app(config_name=None):
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(sandbox_bp)
     
-    # Create database tables
+    # Create indexes for MongoDB
     with app.app_context():
-        db.create_all()
+        try:
+            # Create unique index on email for users collection
+            mongo.db.users.create_index('email', unique=True)
+            mongo.db.amazon_connections.create_index('user_id')
+            mongo.db.update_logs.create_index('user_id')
+            mongo.db.bulk_update_jobs.create_index('user_id')
+            print("✅ MongoDB indexes created")
+        except Exception as e:
+            print(f"⚠️ Index creation warning (can be ignored): {e}")
+    
+    # Load user for Flask-Login
+    @login_manager.user_loader
+    def load_user(user_id):
+        from app.models import User
+        return User.find_by_id(user_id)
     
     return app

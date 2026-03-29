@@ -1,12 +1,12 @@
 """
-Sandbox Auto-Connect Routes
+Sandbox Auto-Connect Routes for MongoDB
 For direct sandbox credentials without OAuth flow
 """
 
 from flask import Blueprint, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 from datetime import datetime
-from app import db
+
 from app.models import AmazonConnection
 from app.services.auth_service import TokenEncryption
 
@@ -38,29 +38,28 @@ def auto_connect():
         encryption = TokenEncryption()
         
         # Deactivate existing connections
-        AmazonConnection.query.filter_by(user_id=current_user.id, is_active=True).update({
-            'is_active': False
-        })
-        
-        # Create new sandbox connection
-        connection = AmazonConnection(
-            user_id=current_user.id,
-            seller_id=seller_id,
-            marketplace_id=marketplace_id,
-            marketplace_name='Amazon.in (Sandbox)',
-            refresh_token_encrypted=encryption.encrypt(refresh_token),
-            access_token_encrypted=None,
-            is_active=True
+        collection = AmazonConnection.get_collection()
+        collection.update_many(
+            {'user_id': current_user.id, 'is_active': True},
+            {'$set': {'is_active': False}}
         )
         
-        db.session.add(connection)
-        db.session.commit()
+        # Create new sandbox connection
+        connection = AmazonConnection({
+            'user_id': current_user.id,
+            'seller_id': seller_id,
+            'marketplace_id': marketplace_id,
+            'marketplace_name': 'Amazon.in (Sandbox)',
+            'refresh_token_encrypted': encryption.encrypt(refresh_token),
+            'access_token_encrypted': None,
+            'is_active': True
+        })
+        connection.save()
         
         flash(f'Successfully connected to Amazon Sandbox! Seller ID: {seller_id}', 'success')
         return redirect(url_for('dashboard.index'))
         
     except Exception as e:
-        db.session.rollback()
         flash(f'Failed to connect sandbox: {str(e)}', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))
 
@@ -69,11 +68,13 @@ def auto_connect():
 @login_required
 def disconnect():
     """Disconnect sandbox connection"""
-    connection = current_user.get_active_connection()
+    collection = AmazonConnection.get_collection()
+    result = collection.update_many(
+        {'user_id': current_user.id, 'is_active': True},
+        {'$set': {'is_active': False}}
+    )
     
-    if connection:
-        connection.is_active = False
-        db.session.commit()
+    if result.modified_count > 0:
         flash('Sandbox connection disconnected.', 'info')
     else:
         flash('No sandbox connection found.', 'warning')

@@ -1,9 +1,11 @@
 """
-API Routes - AJAX endpoints
+API Routes - AJAX endpoints for MongoDB
 """
 
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
+from bson.objectid import ObjectId
+
 from app.services.listing_service import ListingService
 from app.models import UpdateLog, BulkUpdateJob
 
@@ -91,8 +93,8 @@ def update_price():
         
         return jsonify({
             'success': True,
-            'log_id': log.id,
-            'status': log.status
+            'log_id': str(log) if log else None,
+            'status': 'SUCCESS'
         })
     
     except Exception as e:
@@ -119,8 +121,8 @@ def update_inventory():
         
         return jsonify({
             'success': True,
-            'log_id': log.id,
-            'status': log.status
+            'log_id': str(log) if log else None,
+            'status': 'SUCCESS'
         })
     
     except Exception as e:
@@ -131,11 +133,12 @@ def update_inventory():
 @login_required
 def get_stats():
     """Get dashboard stats"""
+    collection = UpdateLog.get_collection()
     stats = {
-        'total_updates': UpdateLog.query.filter_by(user_id=current_user.id).count(),
-        'successful': UpdateLog.query.filter_by(user_id=current_user.id, status='SUCCESS').count(),
-        'failed': UpdateLog.query.filter_by(user_id=current_user.id, status='FAILED').count(),
-        'pending': UpdateLog.query.filter_by(user_id=current_user.id, status='PENDING').count(),
+        'total_updates': collection.count_documents({'user_id': current_user.id}),
+        'successful': collection.count_documents({'user_id': current_user.id, 'status': 'SUCCESS'}),
+        'failed': collection.count_documents({'user_id': current_user.id, 'status': 'FAILED'}),
+        'pending': collection.count_documents({'user_id': current_user.id, 'status': 'PENDING'}),
     }
     
     return jsonify(stats)
@@ -145,36 +148,38 @@ def get_stats():
 @login_required
 def recent_logs():
     """Get recent update logs"""
-    logs = UpdateLog.query.filter_by(user_id=current_user.id)\
-        .order_by(UpdateLog.created_at.desc())\
-        .limit(10).all()
+    logs = UpdateLog.get_recent_by_user(current_user.id, limit=10)
     
     return jsonify([{
-        'id': log.id,
-        'asin': log.asin,
-        'sku': log.sku,
-        'operation': log.operation,
-        'status': log.status,
-        'created_at': log.created_at.isoformat() if log.created_at else None,
-        'error_message': log.error_message
+        'id': str(log.get('_id')),
+        'asin': log.get('asin'),
+        'sku': log.get('sku'),
+        'operation': log.get('operation'),
+        'status': log.get('status'),
+        'created_at': log.get('created_at').isoformat() if log.get('created_at') else None,
+        'error_message': log.get('error_message')
     } for log in logs])
 
 
-@bp.route('/job-status/<int:job_id>')
+@bp.route('/job-status/<job_id>')
 @login_required
 def job_status(job_id):
     """Get bulk job status"""
-    job = BulkUpdateJob.query.filter_by(id=job_id, user_id=current_user.id).first()
+    jobs_collection = BulkUpdateJob.get_collection()
+    job = jobs_collection.find_one({'_id': ObjectId(job_id)})
     
     if not job:
         return jsonify({'error': 'Job not found'}), 404
     
+    total = job.get('total_records', 0)
+    processed = job.get('processed_records', 0)
+    
     return jsonify({
-        'id': job.id,
-        'status': job.status,
-        'total': job.total_records,
-        'processed': job.processed_records,
-        'success': job.success_count,
-        'failed': job.failed_count,
-        'progress': (job.processed_records / job.total_records * 100) if job.total_records else 0
+        'id': str(job.get('_id')),
+        'status': job.get('status'),
+        'total': total,
+        'processed': processed,
+        'success': job.get('success_count', 0),
+        'failed': job.get('failed_count', 0),
+        'progress': (processed / total * 100) if total else 0
     })

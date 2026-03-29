@@ -1,14 +1,15 @@
 """
-Listing Management Routes
+Listing Management Routes for MongoDB
 """
 
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from flask_login import login_required, current_user
 import csv
 import io
+from datetime import datetime
+
 from app.services.listing_service import ListingService
 from app.models import UpdateLog, BulkUpdateJob
-from app import db
 
 bp = Blueprint('listings', __name__)
 
@@ -163,15 +164,74 @@ def bulk_update():
                 flash('CSV file is empty', 'danger')
                 return redirect(url_for('listings.bulk_update'))
             
+            # Create bulk job
+            job_id = BulkUpdateJob.create(
+                user_id=current_user.id,
+                job_name=f"Bulk {operation_type.title()} Update",
+                total_records=len(csv_data)
+            )
+            
             # Process bulk update
-            job = service.bulk_update_from_csv(csv_data, operation_type)
+            errors = []
+            success_count = 0
+            failed_count = 0
             
-            if job.failed_count == 0:
-                flash(f'Bulk update completed successfully! {job.success_count} items updated.', 'success')
+            for i, row in enumerate(csv_data):
+                try:
+                    sku = row.get('sku')
+                    if not sku:
+                        errors.append({'row': i+1, 'error': 'SKU is required'})
+                        failed_count += 1
+                        continue
+                    
+                    if operation_type == 'price':
+                        service.update_price(
+                            sku,
+                            float(row.get('price', 0)),
+                            row.get('currency', 'INR'),
+                            float(row.get('sale_price')) if row.get('sale_price') else None
+                        )
+                    
+                    elif operation_type == 'inventory':
+                        service.update_inventory(
+                            sku,
+                            int(row.get('quantity', 0)),
+                            row.get('fulfillment_channel', 'DEFAULT')
+                        )
+                    
+                    elif operation_type == 'content':
+                        service.update_content(sku, {
+                            'title': row.get('title'),
+                            'description': row.get('description'),
+                            'bullet_points': row.get('bullet_points', '').split('|') if row.get('bullet_points') else None
+                        })
+                    
+                    success_count += 1
+                    
+                except Exception as e:
+                    errors.append({'row': i+1, 'sku': row.get('sku'), 'error': str(e)})
+                    failed_count += 1
+            
+            # Update job status
+            jobs_collection = BulkUpdateJob.get_collection()
+            jobs_collection.update_one(
+                {'_id': job_id},
+                {'$set': {
+                    'processed_records': len(csv_data),
+                    'success_count': success_count,
+                    'failed_count': failed_count,
+                    'status': 'COMPLETED' if failed_count == 0 else 'COMPLETED_WITH_ERRORS',
+                    'errors': errors,
+                    'completed_at': datetime.utcnow()
+                }}
+            )
+            
+            if failed_count == 0:
+                flash(f'Bulk update completed successfully! {success_count} items updated.', 'success')
             else:
-                flash(f'Bulk update completed with {job.failed_count} errors. {job.success_count} items updated.', 'warning')
+                flash(f'Bulk update completed with {failed_count} errors. {success_count} items updated.', 'warning')
             
-            return redirect(url_for('listings.bulk_results', job_id=job.id))
+            return redirect(url_for('listings.bulk_results', job_id=job_id))
             
         except Exception as e:
             flash(f'Bulk update failed: {str(e)}', 'danger')
@@ -180,11 +240,18 @@ def bulk_update():
     return render_template('listings/bulk_update.html')
 
 
-@bp.route('/bulk-results/<int:job_id>')
+@bp.route('/bulk-results/<job_id>')
 @login_required
 def bulk_results(job_id):
     """View bulk update results"""
-    job = BulkUpdateJob.query.filter_by(id=job_id, user_id=current_user.id).first_or_404()
+    from bson.objectid import ObjectId
+    jobs_collection = BulkUpdateJob.get_collection()
+    job = jobs_collection.find_one({'_id': ObjectId(job_id)})
+    
+    if not job:
+        flash('Job not found', 'danger')
+        return redirect(url_for('listings.index'))
+    
     return render_template('listings/bulk_results.html', job=job)
 
 
@@ -195,19 +262,20 @@ def logs():
     page = request.args.get('page', 1, type=int)
     per_page = 20
     
-    logs_query = UpdateLog.query.filter_by(user_id=current_user.id)\
-        .order_by(UpdateLog.created_at.desc())
+    collection = UpdateLog.get_collection()
+    logs_list = list(collection.find(
+        {'user_id': current_user.id}
+    ).sort('created_at', -1).skip((page-1)*per_page).limit(per_page))
     
-    logs = logs_query.paginate(page=page, per_page=per_page, error_out=False)
+    total = collection.count_documents({'user_id': current_user.id})
     
-    return render_template('listings/logs.html', logs=logs)
+    return render_template('listings/logs.html', logs=logs_list, page=page, total=total)
 
 
 @bp.route('/download-template/<operation_type>')
 @login_required
 def download_template(operation_type):
     """Download CSV template for bulk upload"""
-    import csv
     from flask import Response
     
     if operation_type == 'price':

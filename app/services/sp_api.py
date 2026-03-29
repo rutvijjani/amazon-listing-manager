@@ -44,7 +44,10 @@ class SPAPIClient:
         
         # Determine AWS region based on marketplace
         if self.connection:
-            self.aws_region = AmazonOAuth.get_aws_region_for_marketplace(self.connection.marketplace_id)
+            marketplace_id = self.connection.marketplace_id or 'A21TJRUUN4KGV'
+            self.aws_region = AmazonOAuth.get_aws_region_for_marketplace(marketplace_id)
+            current_app.logger.info(f"Marketplace ID from connection: {marketplace_id}")
+            current_app.logger.info(f"Resolved AWS region: {self.aws_region}")
         else:
             self.aws_region = current_app.config.get('AWS_REGION', 'us-east-1')
         

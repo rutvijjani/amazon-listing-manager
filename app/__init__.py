@@ -6,8 +6,8 @@ from flask import Flask
 from flask_login import LoginManager
 from flask_pymongo import PyMongo
 from dotenv import load_dotenv
-from pymongo import MongoClient
 import os
+import certifi
 
 # Initialize extensions
 mongo = PyMongo()
@@ -24,35 +24,26 @@ def create_app(config_name=None):
     # Configuration
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
     
-    # MongoDB Configuration - Using direct client for better SSL handling
+    # MongoDB Configuration - Simplified with certifi for SSL
     mongo_uri = os.getenv('MONGODB_URI')
     if mongo_uri:
-        try:
-            # Create client with SSL settings
-            client = MongoClient(
-                mongo_uri,
-                ssl=True,
-                ssl_cert_reqs=False,
-                connectTimeoutMS=30000,
-                socketTimeoutMS=30000,
-                serverSelectionTimeoutMS=30000
-            )
-            # Test connection
-            client.admin.command('ping')
-            app.config['MONGO_URI'] = mongo_uri
-            app.mongo_client = client
-            app.db = client.get_default_database()
-            print(f"✅ MongoDB Atlas Connected")
-        except Exception as e:
-            print(f"⚠️ MongoDB Connection Error: {e}")
-            # Fallback
-            app.config['MONGO_URI'] = mongo_uri
+        # Use certifi for proper SSL certificates
+        app.config['MONGO_URI'] = mongo_uri
+        app.config['MONGO_CONNECT'] = False
+        print(f"✅ MongoDB Atlas Configured")
     else:
         app.config['MONGO_URI'] = 'mongodb://localhost:27017/amazon_listing_manager'
         print(f"⚠️ Using local MongoDB")
     
-    # Initialize extensions
-    mongo.init_app(app)
+    # Initialize extensions with SSL certificate
+    try:
+        mongo.init_app(app, uri=app.config['MONGO_URI'], 
+                       connect=False,
+                       tlsCAFile=certifi.where())
+        print("✅ MongoDB Initialized")
+    except Exception as e:
+        print(f"⚠️ MongoDB Init Error: {e}")
+    
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Please log in to access this page.'

@@ -101,15 +101,17 @@ class SPAPIClient:
             }
             return self._session_credentials
         
-        # Assume role via STS
+        # Assume role via STS - STS is a global service, use us-east-1 for STS calls
         sts_client = boto3.client(
             'sts',
             aws_access_key_id=self.aws_access_key,
             aws_secret_access_key=self.aws_secret_key,
-            region_name=self.aws_region
+            region_name='us-east-1'  # STS works globally from us-east-1
         )
         
         try:
+            current_app.logger.info(f"Assuming role: {self.role_arn}")
+            current_app.logger.info(f"Using AWS region: {self.aws_region}")
             assumed_role = sts_client.assume_role(
                 RoleArn=self.role_arn,
                 RoleSessionName='SPAPISession',
@@ -117,6 +119,7 @@ class SPAPIClient:
             )
             
             self._session_credentials = assumed_role['Credentials']
+            current_app.logger.info("Role assumed successfully")
             return self._session_credentials
         except Exception as e:
             current_app.logger.error(f"Failed to assume role: {e}")
@@ -142,6 +145,11 @@ class SPAPIClient:
         # Get endpoint
         endpoint = AmazonOAuth.get_sp_api_endpoint(self.connection.marketplace_id)
         url = f"{endpoint}{path}"
+        
+        # Debug logging
+        current_app.logger.info(f"SP-API Request: {method} {url}")
+        current_app.logger.info(f"Marketplace: {self.connection.marketplace_id}")
+        current_app.logger.info(f"AWS Region for signing: {self.aws_region}")
         
         # Get tokens
         access_token = self._get_access_token()

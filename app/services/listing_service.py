@@ -1,5 +1,5 @@
 """
-Listing Service - High-level listing operations
+Listing Service - High-level listing operations (MongoDB Version)
 """
 
 import json
@@ -7,7 +7,7 @@ from datetime import datetime
 from flask import current_app
 from app.services.sp_api import SPAPIClient
 from app.services.auth_service import TokenEncryption
-from app import db
+from app import mongo
 
 
 class ListingService:
@@ -101,30 +101,25 @@ class ListingService:
     def update_price(self, sku, price, currency='INR', sale_price=None):
         """
         Update product price
-        
-        Returns:
-            UpdateLog entry
         """
         if not self.is_connected():
             raise Exception("Amazon account not connected")
         
-        from app.models import UpdateLog
-        
         # Create log entry
-        log = UpdateLog(
-            user_id=self.user.id,
-            sku=sku,
-            operation='UPDATE_PRICE',
-            status='PENDING'
-        )
-        log.set_request_payload({
+        log_data = {
+            'user_id': self.user.id,
             'sku': sku,
-            'price': price,
-            'currency': currency,
-            'sale_price': sale_price
-        })
-        db.session.add(log)
-        db.session.commit()
+            'operation': 'UPDATE_PRICE',
+            'status': 'PENDING',
+            'request_payload': {
+                'sku': sku,
+                'price': price,
+                'currency': currency,
+                'sale_price': sale_price
+            },
+            'created_at': datetime.utcnow()
+        }
+        log_id = mongo.db.update_logs.insert_one(log_data).inserted_id
         
         try:
             result = self.client.update_price(
@@ -135,42 +130,49 @@ class ListingService:
                 sale_price
             )
             
-            log.mark_success()
-            log.set_response_payload(result)
-            db.session.commit()
+            # Update log
+            mongo.db.update_logs.update_one(
+                {'_id': log_id},
+                {'$set': {
+                    'status': 'SUCCESS',
+                    'response_payload': result,
+                    'completed_at': datetime.utcnow()
+                }}
+            )
             
-            return log
+            return result
             
         except Exception as e:
-            log.mark_failed(str(e))
-            db.session.commit()
+            mongo.db.update_logs.update_one(
+                {'_id': log_id},
+                {'$set': {
+                    'status': 'FAILED',
+                    'error_message': str(e),
+                    'completed_at': datetime.utcnow()
+                }}
+            )
             raise
     
     def update_inventory(self, sku, quantity, fulfillment_channel='DEFAULT'):
         """
         Update inventory quantity
-        
-        Returns:
-            UpdateLog entry
         """
         if not self.is_connected():
             raise Exception("Amazon account not connected")
         
-        from app.models import UpdateLog
-        
-        log = UpdateLog(
-            user_id=self.user.id,
-            sku=sku,
-            operation='UPDATE_INVENTORY',
-            status='PENDING'
-        )
-        log.set_request_payload({
+        log_data = {
+            'user_id': self.user.id,
             'sku': sku,
-            'quantity': quantity,
-            'fulfillment_channel': fulfillment_channel
-        })
-        db.session.add(log)
-        db.session.commit()
+            'operation': 'UPDATE_INVENTORY',
+            'status': 'PENDING',
+            'request_payload': {
+                'sku': sku,
+                'quantity': quantity,
+                'fulfillment_channel': fulfillment_channel
+            },
+            'created_at': datetime.utcnow()
+        }
+        log_id = mongo.db.update_logs.insert_one(log_data).inserted_id
         
         try:
             result = self.client.update_inventory(
@@ -180,46 +182,44 @@ class ListingService:
                 fulfillment_channel
             )
             
-            log.mark_success()
-            log.set_response_payload(result)
-            db.session.commit()
+            mongo.db.update_logs.update_one(
+                {'_id': log_id},
+                {'$set': {
+                    'status': 'SUCCESS',
+                    'response_payload': result,
+                    'completed_at': datetime.utcnow()
+                }}
+            )
             
-            return log
+            return result
             
         except Exception as e:
-            log.mark_failed(str(e))
-            db.session.commit()
+            mongo.db.update_logs.update_one(
+                {'_id': log_id},
+                {'$set': {
+                    'status': 'FAILED',
+                    'error_message': str(e),
+                    'completed_at': datetime.utcnow()
+                }}
+            )
             raise
     
     def update_content(self, sku, data):
         """
         Update listing content (title, description, bullets, etc.)
-        
-        Args:
-            sku: Product SKU
-            data: Dict with content fields
-                - title
-                - description
-                - bullet_points (list)
-                - search_terms (list)
-        
-        Returns:
-            UpdateLog entry
         """
         if not self.is_connected():
             raise Exception("Amazon account not connected")
         
-        from app.models import UpdateLog
-        
-        log = UpdateLog(
-            user_id=self.user.id,
-            sku=sku,
-            operation='UPDATE_CONTENT',
-            status='PENDING'
-        )
-        log.set_request_payload(data)
-        db.session.add(log)
-        db.session.commit()
+        log_data = {
+            'user_id': self.user.id,
+            'sku': sku,
+            'operation': 'UPDATE_CONTENT',
+            'status': 'PENDING',
+            'request_payload': data,
+            'created_at': datetime.utcnow()
+        }
+        log_id = mongo.db.update_logs.insert_one(log_data).inserted_id
         
         try:
             # Build patches for content updates
@@ -262,39 +262,44 @@ class ListingService:
                 patches
             )
             
-            log.mark_success()
-            log.set_response_payload(result)
-            db.session.commit()
+            mongo.db.update_logs.update_one(
+                {'_id': log_id},
+                {'$set': {
+                    'status': 'SUCCESS',
+                    'response_payload': result,
+                    'completed_at': datetime.utcnow()
+                }}
+            )
             
-            return log
+            return result
             
         except Exception as e:
-            log.mark_failed(str(e))
-            db.session.commit()
+            mongo.db.update_logs.update_one(
+                {'_id': log_id},
+                {'$set': {
+                    'status': 'FAILED',
+                    'error_message': str(e),
+                    'completed_at': datetime.utcnow()
+                }}
+            )
             raise
     
     def bulk_update_from_csv(self, csv_data, operation_type):
         """
         Process bulk updates from CSV data
-        
-        Args:
-            csv_data: List of dicts with CSV data
-            operation_type: 'price', 'inventory', 'content'
-        
-        Returns:
-            BulkUpdateJob instance
         """
-        from app.models import BulkUpdateJob
-        
-        job = BulkUpdateJob(
-            user_id=self.user.id,
-            job_name=f"Bulk {operation_type.title()} Update",
-            total_records=len(csv_data),
-            status='PROCESSING',
-            started_at=datetime.utcnow()
-        )
-        db.session.add(job)
-        db.session.commit()
+        job_data = {
+            'user_id': self.user.id,
+            'job_name': f"Bulk {operation_type.title()} Update",
+            'total_records': len(csv_data),
+            'processed_records': 0,
+            'success_count': 0,
+            'failed_count': 0,
+            'status': 'PROCESSING',
+            'started_at': datetime.utcnow(),
+            'errors': []
+        }
+        job_id = mongo.db.bulk_update_jobs.insert_one(job_data).inserted_id
         
         errors = []
         
@@ -303,7 +308,6 @@ class ListingService:
                 sku = row.get('sku')
                 if not sku:
                     errors.append({'row': i+1, 'error': 'SKU is required'})
-                    job.failed_count += 1
                     continue
                 
                 if operation_type == 'price':
@@ -328,22 +332,29 @@ class ListingService:
                         'bullet_points': row.get('bullet_points', '').split('|') if row.get('bullet_points') else None
                     })
                 
-                job.success_count += 1
+                mongo.db.bulk_update_jobs.update_one(
+                    {'_id': job_id},
+                    {'$inc': {'success_count': 1, 'processed_records': 1}}
+                )
                 
             except Exception as e:
                 errors.append({'row': i+1, 'sku': row.get('sku'), 'error': str(e)})
-                job.failed_count += 1
-            
-            job.processed_records += 1
-            db.session.commit()
+                mongo.db.bulk_update_jobs.update_one(
+                    {'_id': job_id},
+                    {'$inc': {'failed_count': 1, 'processed_records': 1}}
+                )
         
-        job.status = 'COMPLETED' if job.failed_count == 0 else 'COMPLETED_WITH_ERRORS'
-        job.completed_at = datetime.utcnow()
-        if errors:
-            job.set_errors(errors)
-        db.session.commit()
+        # Final update
+        mongo.db.bulk_update_jobs.update_one(
+            {'_id': job_id},
+            {'$set': {
+                'status': 'COMPLETED' if not errors else 'COMPLETED_WITH_ERRORS',
+                'completed_at': datetime.utcnow(),
+                'errors': errors
+            }}
+        )
         
-        return job
+        return job_id
     
     # ==================== Helper Methods ====================
     

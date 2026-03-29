@@ -80,11 +80,11 @@ class AmazonOAuth:
         Scopes needed:
         - sellingpartnerapi::notifications (optional)
         """
+        # Basic scope - app must have these enabled in Developer Console
+        # Go to: Developer Central > Your App > App Settings > OAuth Login Scopes
         scopes = [
-            'sellingpartnerapi::read_product_catalog',
-            'sellingpartnerapi::listings_write',
-            'sellingpartnerapi::inventory_write',
-            'sellingpartnerapi::pricing_write',
+            'profile',  # Basic profile access
+            'sellingpartnerapi::read_product_catalog',  # Read products
         ]
         
         params = {

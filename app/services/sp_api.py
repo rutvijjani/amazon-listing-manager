@@ -40,8 +40,13 @@ class SPAPIClient:
         # AWS Credentials
         self.aws_access_key = current_app.config.get('AWS_ACCESS_KEY_ID')
         self.aws_secret_key = current_app.config.get('AWS_SECRET_ACCESS_KEY')
-        self.aws_region = current_app.config.get('AWS_REGION', 'us-east-1')
         self.role_arn = current_app.config.get('SP_API_ROLE_ARN')
+        
+        # Determine AWS region based on marketplace
+        if self.connection:
+            self.aws_region = AmazonOAuth.get_aws_region_for_marketplace(self.connection.marketplace_id)
+        else:
+            self.aws_region = current_app.config.get('AWS_REGION', 'us-east-1')
         
         # Token encryption
         self.encryption = TokenEncryption()

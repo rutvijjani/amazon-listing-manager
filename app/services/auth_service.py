@@ -162,11 +162,11 @@ class AmazonOAuth:
         # North America
         if marketplace_id in ['ATVPDKIKX0DER', 'A2EUQ1WTGCTBG2', 'A1AM78C64UM0Y8', 'A2Q3Y263D00KWC']:
             return 'https://sellingpartnerapi-na.amazon.com'
-        # Europe
+        # Europe (including India, UAE, Turkey, Egypt)
         elif marketplace_id in ['A1PA6795UKMFR9', 'ARBP9OOSHTCHU', 'A1RKKUPIHCS9HS', 
                                 'A13V1IB3VIYZZH', 'A1F83G8C2ARO7P', 'APJ6JRA9NG5V4',
                                 'A1805IZSGTT6HS', 'A17E79C6D8DWNP', 'A2NODRKZP88ZB9',
-                                'A2VIGQ35RCS4UG']:
+                                'A2VIGQ35RCS4UG', 'A21TJRUUN4KGV', 'A33AVAJ2PDY3EV']:
             return 'https://sellingpartnerapi-eu.amazon.com'
         # Far East
         elif marketplace_id in ['A39IBJ37TRP1C6', 'A1VC38T7YXB528', 'A19VAU5U5O7RUS']:
@@ -174,3 +174,22 @@ class AmazonOAuth:
         # Default to North America
         else:
             return 'https://sellingpartnerapi-na.amazon.com'
+    
+    @staticmethod
+    def get_aws_region_for_marketplace(marketplace_id):
+        """Get AWS region for SP-API signing based on marketplace"""
+        # North America endpoint → us-east-1
+        if marketplace_id in ['ATVPDKIKX0DER', 'A2EUQ1WTGCTBG2', 'A1AM78C64UM0Y8', 'A2Q3Y263D00KWC']:
+            return 'us-east-1'
+        # Europe endpoint → eu-west-1
+        elif marketplace_id in ['A1PA6795UKMFR9', 'ARBP9OOSHTCHU', 'A1RKKUPIHCS9HS', 
+                                'A13V1IB3VIYZZH', 'A1F83G8C2ARO7P', 'APJ6JRA9NG5V4',
+                                'A1805IZSGTT6HS', 'A17E79C6D8DWNP', 'A2NODRKZP88ZB9',
+                                'A2VIGQ35RCS4UG', 'A21TJRUUN4KGV', 'A33AVAJ2PDY3EV']:
+            return 'eu-west-1'
+        # Far East endpoint → us-west-2
+        elif marketplace_id in ['A39IBJ37TRP1C6', 'A1VC38T7YXB528', 'A19VAU5U5O7RUS']:
+            return 'us-west-2'
+        # Default
+        else:
+            return 'us-east-1'

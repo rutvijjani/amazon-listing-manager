@@ -6,6 +6,7 @@ from flask import Flask
 from flask_login import LoginManager
 from flask_pymongo import PyMongo
 from dotenv import load_dotenv
+from pymongo import MongoClient
 import os
 
 # Initialize extensions
@@ -23,17 +24,30 @@ def create_app(config_name=None):
     # Configuration
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
     
-    # MongoDB Configuration
+    # MongoDB Configuration - Using direct client for better SSL handling
     mongo_uri = os.getenv('MONGODB_URI')
     if mongo_uri:
-        # Add SSL/TLS configuration for MongoDB Atlas compatibility
-        if 'ssl=' not in mongo_uri and 'tls=' not in mongo_uri:
-            separator = '&' if '?' in mongo_uri else '?'
-            mongo_uri = f"{mongo_uri}{separator}ssl=true&tlsAllowInvalidCertificates=true"
-        app.config['MONGO_URI'] = mongo_uri
-        print(f"✅ Using MongoDB Atlas")
+        try:
+            # Create client with SSL settings
+            client = MongoClient(
+                mongo_uri,
+                ssl=True,
+                ssl_cert_reqs=False,
+                connectTimeoutMS=30000,
+                socketTimeoutMS=30000,
+                serverSelectionTimeoutMS=30000
+            )
+            # Test connection
+            client.admin.command('ping')
+            app.config['MONGO_URI'] = mongo_uri
+            app.mongo_client = client
+            app.db = client.get_default_database()
+            print(f"✅ MongoDB Atlas Connected")
+        except Exception as e:
+            print(f"⚠️ MongoDB Connection Error: {e}")
+            # Fallback
+            app.config['MONGO_URI'] = mongo_uri
     else:
-        # Fallback to local MongoDB
         app.config['MONGO_URI'] = 'mongodb://localhost:27017/amazon_listing_manager'
         print(f"⚠️ Using local MongoDB")
     
@@ -60,14 +74,13 @@ def create_app(config_name=None):
     # Create indexes for MongoDB
     with app.app_context():
         try:
-            # Create unique index on email for users collection
             mongo.db.users.create_index('email', unique=True)
             mongo.db.amazon_connections.create_index('user_id')
             mongo.db.update_logs.create_index('user_id')
             mongo.db.bulk_update_jobs.create_index('user_id')
             print("✅ MongoDB indexes created")
         except Exception as e:
-            print(f"⚠️ Index creation warning (can be ignored): {e}")
+            print(f"⚠️ Index creation warning: {e}")
     
     # Load user for Flask-Login
     @login_manager.user_loader

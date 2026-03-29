@@ -52,19 +52,19 @@ def create_app(config_name=None):
         # Use certifi for proper SSL certificates
         app.config['MONGO_URI'] = mongo_uri
         app.config['MONGO_CONNECT'] = False
-        print(f"✅ MongoDB Atlas Configured")
+        print("MongoDB Atlas configured")
     else:
         app.config['MONGO_URI'] = 'mongodb://localhost:27017/amazon_listing_manager'
-        print(f"⚠️ Using local MongoDB")
+        print("Using local MongoDB")
     
     # Initialize extensions with SSL certificate
     try:
         mongo.init_app(app, uri=app.config['MONGO_URI'], 
                        connect=False,
                        tlsCAFile=certifi.where())
-        print("✅ MongoDB Initialized")
+        print("MongoDB initialized")
     except Exception as e:
-        print(f"⚠️ MongoDB Init Error: {e}")
+        print(f"MongoDB init error: {e}")
     
     login_manager.init_app(app)
     csrf.init_app(app)
@@ -84,6 +84,10 @@ def create_app(config_name=None):
     app.register_blueprint(listings_bp, url_prefix='/listings')
     app.register_blueprint(api_bp, url_prefix='/api')
     app.register_blueprint(sandbox_bp)
+
+    @app.get('/health')
+    def health():
+        return {'status': 'ok'}, 200
     
     # Create indexes for MongoDB
     with app.app_context():
@@ -92,9 +96,9 @@ def create_app(config_name=None):
             mongo.db.amazon_connections.create_index('user_id')
             mongo.db.update_logs.create_index('user_id')
             mongo.db.bulk_update_jobs.create_index('user_id')
-            print("✅ MongoDB indexes created")
+            print("MongoDB indexes created")
         except Exception as e:
-            print(f"⚠️ Index creation warning: {e}")
+            print(f"Index creation warning: {e}")
     
     # Load user for Flask-Login
     @login_manager.user_loader
@@ -103,3 +107,4 @@ def create_app(config_name=None):
         return User.find_by_id(user_id)
     
     return app
+

@@ -103,6 +103,29 @@ python run.py
 
 The app will be available at: http://localhost:5000
 
+## Local QA
+
+Before pushing to Render, run the local smoke suite:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\run_local_qa.ps1
+```
+
+What it checks:
+- app boots and `/health` responds
+- register/login flow still works
+- Amazon settings page loads
+- manual update page loads for a connected seller
+- bulk update page loads for a connected seller
+- listing search failures render a user-facing message instead of raw 500s
+
+If the script says the local venv is broken, recreate it and reinstall dependencies:
+
+```powershell
+py -3.12 -m venv venv
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
 ## Amazon SP-API Setup
 
 ### 1. Register as Amazon Developer
@@ -327,3 +350,4 @@ For issues and feature requests, please create an issue in the repository.
 ## Disclaimer
 
 This is an unofficial tool and is not affiliated with Amazon. Use at your own risk. Always test thoroughly before making bulk updates to live listings.
+

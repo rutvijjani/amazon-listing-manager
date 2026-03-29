@@ -35,7 +35,14 @@ class SPAPIClient:
             user: User model instance (alternative to connection)
         """
         self.connection = connection
-        self.user = user or (connection.user if connection else None)
+        self.user = user
+
+        if not self.user and connection and getattr(connection, 'user_id', None):
+            try:
+                from app.models import User
+                self.user = User.find_by_id(connection.user_id)
+            except Exception:
+                self.user = None
         
         # AWS Credentials
         self.aws_access_key = current_app.config.get('AWS_ACCESS_KEY_ID')
@@ -433,3 +440,4 @@ class SPAPIClient:
         }]
         
         return self.patch_listings_item(seller_id, sku, patches)
+

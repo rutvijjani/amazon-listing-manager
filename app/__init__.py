@@ -26,10 +26,14 @@ def create_app(config_name=None):
     # MongoDB Configuration
     mongo_uri = os.getenv('MONGODB_URI')
     if mongo_uri:
+        # Add SSL/TLS configuration for MongoDB Atlas compatibility
+        if 'ssl=' not in mongo_uri and 'tls=' not in mongo_uri:
+            separator = '&' if '?' in mongo_uri else '?'
+            mongo_uri = f"{mongo_uri}{separator}ssl=true&tlsAllowInvalidCertificates=true"
         app.config['MONGO_URI'] = mongo_uri
         print(f"✅ Using MongoDB Atlas")
     else:
-        # Fallback to local MongoDB or SQLite
+        # Fallback to local MongoDB
         app.config['MONGO_URI'] = 'mongodb://localhost:27017/amazon_listing_manager'
         print(f"⚠️ Using local MongoDB")
     

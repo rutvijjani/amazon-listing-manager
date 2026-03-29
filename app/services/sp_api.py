@@ -301,21 +301,29 @@ class SPAPIClient:
             'productType': product_type,
             'patches': patches
         }
+        params = {
+            'marketplaceIds': self.connection.marketplace_id
+        }
         
         return self._make_request(
             'PATCH',
             f'/listings/2021-08-01/items/{seller_id}/{sku}',
-            data=data
+            data=data,
+            params=params
         )
     
     def put_listings_item(self, seller_id, sku, data):
         """
         Create or fully update a listing item
         """
+        params = {
+            'marketplaceIds': self.connection.marketplace_id
+        }
         return self._make_request(
             'PUT',
             f'/listings/2021-08-01/items/{seller_id}/{sku}',
-            data=data
+            data=data,
+            params=params
         )
     
     def delete_listings_item(self, seller_id, sku):

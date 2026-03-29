@@ -7,6 +7,7 @@ from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime
 from bson.objectid import ObjectId
 from flask_login import UserMixin
+from app import mongo
 
 
 class User(UserMixin):
@@ -32,7 +33,7 @@ class User(UserMixin):
     @staticmethod
     def get_collection():
         """Get MongoDB collection"""
-        return current_app.mongo.db[User.collection_name]
+        return mongo.db[User.collection_name]
     
     @classmethod
     def find_by_email(cls, email):
@@ -137,7 +138,7 @@ class AmazonConnection:
     @staticmethod
     def get_collection():
         """Get MongoDB collection"""
-        return current_app.mongo.db[AmazonConnection.collection_name]
+        return mongo.db[AmazonConnection.collection_name]
     
     def save(self):
         """Save connection to MongoDB"""
@@ -170,7 +171,7 @@ class UpdateLog:
     
     @staticmethod
     def get_collection():
-        return current_app.mongo.db[UpdateLog.collection_name]
+        return mongo.db[UpdateLog.collection_name]
     
     @classmethod
     def create(cls, user_id, asin, sku, operation, request_payload, status='PENDING'):
@@ -206,7 +207,7 @@ class BulkUpdateJob:
     
     @staticmethod
     def get_collection():
-        return current_app.mongo.db[BulkUpdateJob.collection_name]
+        return mongo.db[BulkUpdateJob.collection_name]
     
     @classmethod
     def create(cls, user_id, job_name, total_records):

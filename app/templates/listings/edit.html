@@ -98,6 +98,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('listings.edit', sku=sku) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="price">
                     
                     <div class="row g-3">
@@ -139,6 +140,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('listings.edit', sku=sku) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="inventory">
                     
                     <div class="row g-3">
@@ -179,6 +181,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('listings.edit', sku=sku) }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="content">
                     
                     <div class="mb-3">

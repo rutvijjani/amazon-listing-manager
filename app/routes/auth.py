@@ -6,7 +6,7 @@ from flask import Blueprint, render_template, redirect, url_for, flash, request,
 from flask_login import login_user, logout_user, login_required, current_user
 from werkzeug.security import generate_password_hash, check_password_hash
 from urllib.parse import urlparse
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app import mongo
 from app.models import User, AmazonConnection
@@ -121,6 +121,8 @@ def amazon_connect():
     
     # Get marketplace from query param or default to India
     marketplace_id = request.args.get('marketplace', 'A21TJRUUN4KGV')
+    session['oauth_marketplace_id'] = marketplace_id
+    session['oauth_marketplace_name'] = AmazonOAuth.get_marketplace_name(marketplace_id)
     
     auth_url = oauth.get_authorization_url(state=state, marketplace_id=marketplace_id)
     return redirect(auth_url)
@@ -157,6 +159,9 @@ def amazon_callback():
         token_data = oauth.exchange_code_for_tokens(code)
         
         encryption = TokenEncryption()
+        marketplace_id = session.get('oauth_marketplace_id', 'A21TJRUUN4KGV')
+        marketplace_name = session.get('oauth_marketplace_name', AmazonOAuth.get_marketplace_name(marketplace_id))
+        expires_in = token_data.get('expires_in')
         
         # Deactivate existing connections
         collection = AmazonConnection.get_collection()
@@ -169,16 +174,19 @@ def amazon_callback():
         connection = AmazonConnection({
             'user_id': current_user.id,
             'seller_id': 'pending',
-            'marketplace_id': 'A21TJRUUN4KGV',
-            'marketplace_name': 'Amazon.in',
+            'marketplace_id': marketplace_id,
+            'marketplace_name': marketplace_name,
             'refresh_token_encrypted': encryption.encrypt(token_data['refresh_token']),
             'access_token_encrypted': encryption.encrypt(token_data.get('access_token')),
+            'token_expires_at': datetime.utcnow() + timedelta(seconds=expires_in) if expires_in else None,
             'is_active': True
         })
         connection.save()
         
         # Clear OAuth state
         session.pop('oauth_state', None)
+        session.pop('oauth_marketplace_id', None)
+        session.pop('oauth_marketplace_name', None)
         
         flash('Amazon account connected successfully!', 'success')
         return redirect(url_for('dashboard.amazon_settings'))

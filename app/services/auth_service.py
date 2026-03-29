@@ -72,6 +72,18 @@ class AmazonOAuth:
         self.client_id = current_app.config.get('LWA_CLIENT_ID')
         self.client_secret = current_app.config.get('LWA_CLIENT_SECRET')
         self.redirect_uri = current_app.config.get('AMAZON_REDIRECT_URI')
+
+    def _validate_oauth_config(self):
+        """Ensure OAuth configuration is present before building requests."""
+        missing = [
+            key for key, value in {
+                'LWA_CLIENT_ID': self.client_id,
+                'LWA_CLIENT_SECRET': self.client_secret,
+                'AMAZON_REDIRECT_URI': self.redirect_uri,
+            }.items() if not value
+        ]
+        if missing:
+            raise Exception(f"Missing Amazon OAuth configuration: {', '.join(missing)}")
     
     def get_authorization_url(self, state=None, marketplace_id='A21TJRUUN4KGV'):
         """
@@ -80,6 +92,7 @@ class AmazonOAuth:
         Scopes needed:
         - sellingpartnerapi::notifications (optional)
         """
+        self._validate_oauth_config()
         # Basic scope - app must have these enabled in Developer Console
         # Go to: Developer Central > Your App > App Settings > OAuth Login Scopes
         scopes = [
@@ -105,6 +118,7 @@ class AmazonOAuth:
         """
         Exchange authorization code for access and refresh tokens
         """
+        self._validate_oauth_config()
         data = {
             'grant_type': 'authorization_code',
             'code': code,
@@ -128,6 +142,7 @@ class AmazonOAuth:
         """
         Refresh access token using refresh token
         """
+        self._validate_oauth_config()
         data = {
             'grant_type': 'refresh_token',
             'refresh_token': refresh_token,

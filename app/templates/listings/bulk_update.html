@@ -19,6 +19,7 @@
             </div>
             <div class="card-body">
                 <form method="POST" action="{{ url_for('listings.bulk_update') }}" enctype="multipart/form-data">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="mb-3">
                         <label for="operation_type" class="form-label">Update Type</label>
                         <select class="form-select" id="operation_type" name="operation_type" required>
@@ -118,7 +119,7 @@
 </div>
 
 <!-- Recent Bulk Jobs -->
-{% if current_user.bulk_update_jobs.count() > 0 %}
+{% if recent_jobs %}
 <div class="row mt-4">
     <div class="col-12">
         <div class="card">
@@ -139,7 +140,7 @@
                             </tr>
                         </thead>
                         <tbody>
-                            {% for job in current_user.bulk_update_jobs.order_by(BulkUpdateJob.created_at.desc()).limit(10) %}
+                            {% for job in recent_jobs %}
                             <tr>
                                 <td>{{ job.job_name }}</td>
                                 <td>
@@ -171,7 +172,7 @@
                                 </td>
                                 <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else '-' }}</td>
                                 <td>
-                                    <a href="{{ url_for('listings.bulk_results', job_id=job.id) }}" 
+                                    <a href="{{ url_for('listings.bulk_results', job_id=job._id) }}" 
                                        class="btn btn-sm btn-outline-primary">
                                         View Details
                                     </a>

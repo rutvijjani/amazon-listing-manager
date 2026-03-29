@@ -2,11 +2,11 @@
 WSGI entry point for PythonAnywhere deployment
 """
 
-import sys
 import os
+import sys
 
 # Add project path
-path = '/home/yourusername/my-flask-app'
+path = os.path.dirname(os.path.abspath(__file__))
 if path not in sys.path:
     sys.path.insert(0, path)
 

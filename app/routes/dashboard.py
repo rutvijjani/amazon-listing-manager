@@ -2,7 +2,7 @@
 Dashboard Routes for MongoDB
 """
 
-from flask import Blueprint, render_template
+from flask import Blueprint, render_template, redirect, url_for
 from flask_login import login_required, current_user
 from app.models import User, UpdateLog, BulkUpdateJob
 
@@ -47,7 +47,7 @@ def index():
 @login_required
 def settings():
     """General settings page"""
-    return render_template('settings/general.html', user=current_user)
+    return redirect(url_for('dashboard.amazon_settings'))
 
 
 @bp.route('/settings/amazon')

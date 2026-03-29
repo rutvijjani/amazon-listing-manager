@@ -106,10 +106,12 @@ function debounce(func, wait) {
  * AJAX request helper
  */
 async function apiRequest(url, options = {}) {
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
     const defaultOptions = {
         headers: {
             'Content-Type': 'application/json',
-            'X-Requested-With': 'XMLHttpRequest'
+            'X-Requested-With': 'XMLHttpRequest',
+            ...(csrfToken ? { 'X-CSRFToken': csrfToken } : {})
         }
     };
     

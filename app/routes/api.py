@@ -4,6 +4,7 @@ API Routes - AJAX endpoints for MongoDB
 
 from flask import Blueprint, request, jsonify
 from flask_login import login_required, current_user
+from bson.errors import InvalidId
 from bson.objectid import ObjectId
 
 from app.services.listing_service import ListingService
@@ -166,7 +167,12 @@ def recent_logs():
 def job_status(job_id):
     """Get bulk job status"""
     jobs_collection = BulkUpdateJob.get_collection()
-    job = jobs_collection.find_one({'_id': ObjectId(job_id)})
+    try:
+        object_id = ObjectId(job_id)
+    except InvalidId:
+        return jsonify({'error': 'Invalid job ID'}), 400
+
+    job = jobs_collection.find_one({'_id': object_id, 'user_id': current_user.id})
     
     if not job:
         return jsonify({'error': 'Job not found'}), 404

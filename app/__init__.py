@@ -5,6 +5,7 @@ Amazon Listing Manager - Flask Application Factory (MongoDB Version)
 from flask import Flask
 from flask_login import LoginManager
 from flask_pymongo import PyMongo
+from flask_wtf.csrf import CSRFProtect
 from dotenv import load_dotenv
 import os
 import certifi
@@ -12,6 +13,7 @@ import certifi
 # Initialize extensions
 mongo = PyMongo()
 login_manager = LoginManager()
+csrf = CSRFProtect()
 
 def create_app(config_name=None):
     """Application factory pattern for MongoDB"""
@@ -23,6 +25,23 @@ def create_app(config_name=None):
     
     # Configuration
     app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev-secret-key')
+    config_keys = [
+        'TOKEN_ENCRYPTION_KEY',
+        'LWA_CLIENT_ID',
+        'LWA_CLIENT_SECRET',
+        'AMAZON_REDIRECT_URI',
+        'AWS_ACCESS_KEY_ID',
+        'AWS_SECRET_ACCESS_KEY',
+        'AWS_REGION',
+        'SP_API_ROLE_ARN',
+        'SANDBOX_REFRESH_TOKEN',
+        'SANDBOX_SELLER_ID',
+        'SANDBOX_MARKETPLACE_ID',
+    ]
+    for key in config_keys:
+        value = os.getenv(key)
+        if value:
+            app.config[key] = value
     
     # MongoDB Configuration - Simplified with certifi for SSL
     mongo_uri = os.getenv('MONGODB_URI')
@@ -45,6 +64,7 @@ def create_app(config_name=None):
         print(f"⚠️ MongoDB Init Error: {e}")
     
     login_manager.init_app(app)
+    csrf.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message = 'Please log in to access this page.'
     login_manager.login_message_category = 'info'

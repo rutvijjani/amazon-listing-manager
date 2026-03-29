@@ -64,7 +64,6 @@ class SPAPIClient:
             raise Exception("No Amazon connection provided")
         
         from app.models import AmazonConnection
-        from app import db
         
         # Check if we have a valid cached token
         if self.connection.access_token_encrypted and self.connection.token_expires_at:
@@ -83,7 +82,14 @@ class SPAPIClient:
             self.connection.access_token_encrypted = self.encryption.encrypt(token_data['access_token'])
             self.connection.token_expires_at = token_data['expires_at']
             self.connection.updated_at = datetime.utcnow()
-            db.session.commit()
+            AmazonConnection.get_collection().update_one(
+                {'_id': self.connection._id},
+                {'$set': {
+                    'access_token_encrypted': self.connection.access_token_encrypted,
+                    'token_expires_at': self.connection.token_expires_at,
+                    'updated_at': self.connection.updated_at,
+                }}
+            )
             
             return token_data['access_token']
         except Exception as e:
@@ -94,6 +100,9 @@ class SPAPIClient:
         """Get STS session credentials for SP-API"""
         if self._session_credentials:
             return self._session_credentials
+
+        if not self.aws_access_key or not self.aws_secret_key:
+            raise Exception('Missing AWS_ACCESS_KEY_ID or AWS_SECRET_ACCESS_KEY configuration')
         
         if not self.role_arn:
             # Use static credentials (not recommended for production)

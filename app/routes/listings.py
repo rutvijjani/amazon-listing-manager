@@ -7,6 +7,8 @@ from flask_login import login_required, current_user
 import csv
 import io
 from datetime import datetime
+from bson.errors import InvalidId
+from bson.objectid import ObjectId
 
 from app.services.listing_service import ListingService
 from app.models import UpdateLog, BulkUpdateJob
@@ -237,16 +239,24 @@ def bulk_update():
             flash(f'Bulk update failed: {str(e)}', 'danger')
             return redirect(url_for('listings.bulk_update'))
     
-    return render_template('listings/bulk_update.html')
+    recent_jobs = list(
+        BulkUpdateJob.get_collection().find({'user_id': current_user.id}).sort('created_at', -1).limit(10)
+    )
+    return render_template('listings/bulk_update.html', recent_jobs=recent_jobs)
 
 
 @bp.route('/bulk-results/<job_id>')
 @login_required
 def bulk_results(job_id):
     """View bulk update results"""
-    from bson.objectid import ObjectId
     jobs_collection = BulkUpdateJob.get_collection()
-    job = jobs_collection.find_one({'_id': ObjectId(job_id)})
+    try:
+        object_id = ObjectId(job_id)
+    except InvalidId:
+        flash('Invalid job ID', 'danger')
+        return redirect(url_for('listings.index'))
+
+    job = jobs_collection.find_one({'_id': object_id, 'user_id': current_user.id})
     
     if not job:
         flash('Job not found', 'danger')

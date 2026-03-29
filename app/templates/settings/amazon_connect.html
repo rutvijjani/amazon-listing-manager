@@ -63,6 +63,7 @@
                 {% endif %}
                 
                 <form method="POST" action="{{ url_for('auth.update_seller_id') }}" class="mb-3">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="input-group">
                         <span class="input-group-text">Seller ID</span>
                         <input type="text" class="form-control" name="seller_id" 
@@ -80,6 +81,7 @@
                 <!-- Disconnect Button -->
                 <form method="POST" action="{{ url_for('auth.amazon_disconnect') }}" 
                       onsubmit="return confirm('Are you sure you want to disconnect your Amazon account?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn btn-danger">
                         <i class="bi bi-link-break"></i> Disconnect Amazon Account
                     </button>

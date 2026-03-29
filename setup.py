@@ -71,7 +71,7 @@ FLASK_ENV=development
 SECRET_KEY={secret_key}
 
 # Database
-DATABASE_URL=sqlite:///app.db
+MONGODB_URI=mongodb://localhost:27017/amazon_listing_manager
 
 # Token Encryption
 TOKEN_ENCRYPTION_KEY={encryption_key or 'generate-using-python-cryptography'}
@@ -114,12 +114,20 @@ def check_dependencies():
     """Check if required packages are installed"""
     print("Checking dependencies...")
     
-    required = ['flask', 'flask_sqlalchemy', 'flask_login', 'requests', 'boto3', 'cryptography']
+    required = {
+        'flask': 'flask',
+        'flask_pymongo': 'flask_pymongo',
+        'pymongo': 'pymongo',
+        'flask_login': 'flask_login',
+        'requests': 'requests',
+        'boto3': 'boto3',
+        'cryptography': 'cryptography',
+    }
     missing = []
     
-    for package in required:
+    for package, import_name in required.items():
         try:
-            __import__(package.replace('_', ''))
+            __import__(import_name)
             print(f"  ✓ {package}")
         except ImportError:
             print(f"  ✗ {package} - MISSING")

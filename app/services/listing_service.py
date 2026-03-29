@@ -372,17 +372,26 @@ class ListingService:
                     main_image = img.get('link')
                     break
         
+        item_name_attr = attributes.get('item_name') or [{}]
+        brand_attr = attributes.get('brand') or [{}]
+        product_types = item.get('productTypes') or [{}]
+
+        title = summaries.get('itemName') or item_name_attr[0].get('value') or 'Untitled product'
+        brand = summaries.get('brandName') or brand_attr[0].get('value') or 'Unknown'
+        product_type = product_types[0].get('productType') if isinstance(product_types, list) and product_types else 'N/A'
+
         formatted = {
-            'asin': item.get('asin'),
-            'title': summaries.get('itemName', attributes.get('item_name', [{}])[0].get('value', 'N/A')),
-            'brand': summaries.get('brandName', attributes.get('brand', [{}])[0].get('value', 'N/A')),
+            'asin': item.get('asin') or 'N/A',
+            'title': str(title),
+            'brand': str(brand),
             'main_image': main_image,
-            'product_type': item.get('productTypes', [{}])[0].get('productType', 'N/A') if item.get('productTypes') else 'N/A',
+            'product_type': product_type or 'N/A',
         }
         
         if detailed:
-            formatted['description'] = attributes.get('product_description', [{}])[0].get('value', '')
-            formatted['bullet_points'] = [bp.get('value') for bp in attributes.get('bullet_point', [])]
+            description_attr = attributes.get('product_description') or [{}]
+            formatted['description'] = description_attr[0].get('value', '') or ''
+            formatted['bullet_points'] = [bp.get('value') for bp in (attributes.get('bullet_point') or []) if bp.get('value')]
             formatted['images'] = images.get('images', [])
         
         return formatted

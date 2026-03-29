@@ -73,12 +73,12 @@
                             {% endif %}
                         </td>
                         <td>
-                            <strong>{{ item.title[:80] }}{% if item.title|length > 80 %}...{% endif %}</strong>
+                            <strong>{{ (item.title or 'Untitled product')[:80] }}{% if (item.title or 'Untitled product')|length > 80 %}...{% endif %}</strong>
                         </td>
                         <td>
                             <code>{{ item.asin }}</code>
                         </td>
-                        <td>{{ item.brand }}</td>
+                        <td>{{ item.brand or 'Unknown' }}</td>
                         <td>
                             <span class="badge bg-info">{{ item.product_type }}</span>
                         </td>
@@ -105,7 +105,7 @@
 {% endif %}
 
 <!-- Quick Tips -->
-{% if not items %}
+{% if items is not defined or not items %}
 <div class="row mt-4">
     <div class="col-md-4">
         <div class="card text-center h-100">

@@ -2,7 +2,7 @@
 Listing Management Routes for MongoDB
 """
 
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
 from flask_login import login_required, current_user
 import csv
 import io
@@ -27,20 +27,20 @@ def index():
 @login_required
 def search():
     """Search listings"""
-    service = ListingService(current_user)
-    
-    if not service.is_connected():
-        flash('Please connect your Amazon account first', 'warning')
-        return redirect(url_for('dashboard.amazon_settings'))
-    
-    query = request.args.get('q', '').strip()
-    search_type = request.args.get('type', 'keyword')
-    
-    if not query:
-        flash('Please enter a search term', 'warning')
-        return render_template('listings/list.html')
-    
     try:
+        service = ListingService(current_user)
+        
+        if not service.is_connected():
+            flash('Please connect your Amazon account first', 'warning')
+            return redirect(url_for('dashboard.amazon_settings'))
+        
+        query = request.args.get('q', '').strip()
+        search_type = request.args.get('type', 'keyword')
+        
+        if not query:
+            flash('Please enter a search term', 'warning')
+            return render_template('listings/list.html', items=[], query='', search_type=search_type)
+
         if search_type == 'asin':
             # Search by ASIN
             asins = [a.strip() for a in query.split(',')]
@@ -55,8 +55,11 @@ def search():
                              search_type=search_type)
     
     except Exception as e:
+        current_app.logger.exception("Listing search request failed")
+        query = request.args.get('q', '').strip()
+        search_type = request.args.get('type', 'keyword')
         flash(f'Search failed: {str(e)}', 'danger')
-        return render_template('listings/list.html', query=query)
+        return render_template('listings/list.html', items=[], query=query, search_type=search_type)
 
 
 @bp.route('/item/<asin>')

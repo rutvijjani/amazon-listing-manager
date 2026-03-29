@@ -23,7 +23,7 @@ class User(UserMixin):
         self.password_hash = user_data.get('password_hash', '')
         self.name = user_data.get('name', '')
         self.created_at = user_data.get('created_at', datetime.utcnow())
-        self.is_active = user_data.get('is_active', True)
+        self._is_active = user_data.get('is_active', True)
     
     @property
     def id(self):
@@ -105,6 +105,10 @@ class User(UserMixin):
     @property
     def is_authenticated(self):
         return True
+
+    @property
+    def is_active(self):
+        return bool(self._is_active)
     
     @property
     def is_anonymous(self):

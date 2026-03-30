@@ -1,0 +1,90 @@
+{% extends 'base.html' %}
+
+{% block title %}Team Access - Amazon Listing Manager{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-8">
+        <h2><i class="bi bi-people"></i> Team Access</h2>
+        <p class="text-muted mb-0">Invite exact email IDs. Only invited email addresses can register and access this workspace.</p>
+    </div>
+    <div class="col-md-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <h6 class="mb-2"><i class="bi bi-info-circle"></i> Guide</h6>
+                <p class="small text-muted mb-0">Send an invite, let the user open the secure registration link, and they will only see their own activity after login.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-lg-5 mb-4">
+        <div class="card h-100">
+            <div class="card-header bg-dark text-white">
+                <i class="bi bi-envelope-plus"></i> Send Invite
+            </div>
+            <div class="card-body">
+                <form method="POST" action="{{ url_for('auth.create_invite') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <div class="mb-3">
+                        <label class="form-label">Invite Email</label>
+                        <input type="email" class="form-control" name="email" placeholder="user@example.com" required>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i> Create Invite
+                    </button>
+                </form>
+                <hr>
+                <div class="small text-muted">
+                    If SMTP is configured, the email is sent automatically. Otherwise the app shows a shareable invite link after creation.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-7 mb-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <i class="bi bi-clock-history"></i> Recent Invites
+            </div>
+            <div class="card-body p-0">
+                {% if invites %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                                <th>Expiry</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for invite in invites %}
+                            <tr>
+                                <td>{{ invite.email }}</td>
+                                <td>
+                                    {% if invite.status == 'ACCEPTED' %}
+                                    <span class="badge bg-success">Accepted</span>
+                                    {% elif invite.expires_at and invite.expires_at < now %}
+                                    <span class="badge bg-secondary">Expired</span>
+                                    {% else %}
+                                    <span class="badge bg-warning text-dark">Pending</span>
+                                    {% endif %}
+                                </td>
+                                <td>{{ invite.created_at.strftime('%Y-%m-%d %H:%M') if invite.created_at else '-' }}</td>
+                                <td>{{ invite.expires_at.strftime('%Y-%m-%d %H:%M') if invite.expires_at else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="p-4 text-muted">No invites created yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

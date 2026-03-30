@@ -41,6 +41,7 @@
                         </a>
                         <ul class="dropdown-menu">
                             <li><a class="dropdown-item" href="{{ url_for('listings.index') }}">Search Listings</a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('listings.manual_update') }}">Manual Update</a></li>
                             <li><a class="dropdown-item" href="{{ url_for('listings.bulk_update') }}">Bulk Update</a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('listings.logs') }}">Update Logs</a></li>
@@ -58,6 +59,9 @@
                         <ul class="dropdown-menu dropdown-menu-end">
                             <li><a class="dropdown-item" href="{{ url_for('dashboard.amazon_settings') }}">
                                 <i class="bi bi-gear"></i> Amazon Settings
+                            </a></li>
+                            <li><a class="dropdown-item" href="{{ url_for('dashboard.team_access') }}">
+                                <i class="bi bi-people"></i> Team Access
                             </a></li>
                             <li><hr class="dropdown-divider"></li>
                             <li><a class="dropdown-item" href="{{ url_for('auth.logout') }}">

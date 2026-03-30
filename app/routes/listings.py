@@ -2,23 +2,23 @@
 Listing Management Routes for MongoDB
 """
 
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify, current_app
-from flask_login import login_required, current_user
 import csv
 import io
 import json
-from datetime import datetime
+from datetime import UTC, datetime
+
 from bson.errors import InvalidId
 from bson.objectid import ObjectId
+from flask import Blueprint, Response, current_app, flash, redirect, render_template, request, url_for
+from flask_login import current_user, login_required
 
+from app.models import BulkUpdateJob, UpdateLog
 from app.services.listing_service import ListingService
-from app.models import UpdateLog, BulkUpdateJob
 
 bp = Blueprint('listings', __name__)
 
 
 def _build_content_payload(form, selected_fields):
-    """Build content update payload for only the selected fields."""
     data = {}
     normalized_fields = set(selected_fields or [])
 
@@ -28,7 +28,7 @@ def _build_content_payload(form, selected_fields):
         data['description'] = form.get('description', '').strip()
     if 'bullet_points' in normalized_fields:
         data['bullet_points'] = [
-            bp.strip() for bp in form.get('bullet_points', '').split('\n') if bp.strip()
+            bullet.strip() for bullet in form.get('bullet_points', '').split('\n') if bullet.strip()
         ]
     if 'search_terms' in normalized_fields:
         data['search_terms'] = [
@@ -39,7 +39,6 @@ def _build_content_payload(form, selected_fields):
 
 
 def _build_attribute_payload(form):
-    """Build generic attribute payload for selected top-level Amazon attributes."""
     payload = {}
 
     for attribute_key in form.getlist('attribute_keys'):
@@ -72,7 +71,11 @@ def _build_attribute_payload(form):
         if mode == 'list_text':
             template = (original_value or [{}])[0].copy() if isinstance(original_value, list) else {}
             template.pop('value', None)
-            lines = [line.strip() for line in (form.get(f'attr_value__{attribute_key}') or '').splitlines() if line.strip()]
+            lines = [
+                line.strip()
+                for line in (form.get(f'attr_value__{attribute_key}') or '').splitlines()
+                if line.strip()
+            ]
             if not lines:
                 raise Exception(f'Provide at least one value for attribute "{attribute_key}"')
             payload[attribute_key] = [{**template, 'value': line} for line in lines]
@@ -103,8 +106,7 @@ def _build_attribute_payload(form):
             payload[attribute_key] = [entry]
             continue
 
-        textarea_name = f'attr_json__{attribute_key}'
-        raw_value = (form.get(textarea_name) or '').strip()
+        raw_value = (form.get(f'attr_json__{attribute_key}') or '').strip()
         if not raw_value:
             raise Exception(f'Provide a JSON value for attribute "{attribute_key}"')
 
@@ -117,7 +119,6 @@ def _build_attribute_payload(form):
 
 
 def _classify_attribute_editor(attribute_name, attribute_value):
-    """Return template metadata for a user-friendly attribute editor."""
     editor = {
         'name': attribute_name,
         'label': attribute_name.replace('_', ' ').replace('-', ' ').title(),
@@ -125,10 +126,7 @@ def _classify_attribute_editor(attribute_name, attribute_value):
         'json_value': json.dumps(attribute_value, indent=2),
     }
 
-    if not isinstance(attribute_value, list) or not attribute_value:
-        return editor
-
-    if not all(isinstance(item, dict) for item in attribute_value):
+    if not isinstance(attribute_value, list) or not attribute_value or not all(isinstance(item, dict) for item in attribute_value):
         return editor
 
     first = attribute_value[0]
@@ -150,11 +148,7 @@ def _classify_attribute_editor(attribute_name, attribute_value):
         return editor
 
     if len(attribute_value) == 1 and {'value', 'unit'}.issubset(first.keys()) and isinstance(first.get('value'), (int, float)):
-        editor.update({
-            'mode': 'measurement',
-            'value': first.get('value', ''),
-            'unit': first.get('unit', ''),
-        })
+        editor.update({'mode': 'measurement', 'value': first.get('value', ''), 'unit': first.get('unit', '')})
         return editor
 
     if len(attribute_value) == 1 and all(key in first for key in ('length', 'width', 'height')):
@@ -170,18 +164,13 @@ def _classify_attribute_editor(attribute_name, attribute_value):
             if dim_entry.get('unit'):
                 unit = dim_entry.get('unit')
                 break
-        editor.update({
-            'mode': 'dimensions',
-            'dimensions': dimensions,
-            'unit': unit,
-        })
+        editor.update({'mode': 'dimensions', 'dimensions': dimensions, 'unit': unit})
         return editor
 
     return editor
 
 
 def _resolve_product_attributes(listing, catalog_item):
-    """Resolve loaded product attributes for the advanced attribute editor."""
     if listing and listing.get('attributes'):
         return listing.get('attributes') or {}
     if catalog_item and catalog_item.get('attributes'):
@@ -189,52 +178,50 @@ def _resolve_product_attributes(listing, catalog_item):
     return {}
 
 
-def _build_attribute_editors(listing, catalog_item):
+def _build_attribute_editors(listing, catalog_item, requirements_guide=None):
     attributes = _resolve_product_attributes(listing, catalog_item)
-    return [
-        _classify_attribute_editor(attribute_name, attribute_value)
-        for attribute_name, attribute_value in sorted(attributes.items())
-    ]
+    editors = {
+        name: _classify_attribute_editor(name, value)
+        for name, value in attributes.items()
+    }
+
+    ordered_names = []
+    if requirements_guide:
+        ordered_names.extend(requirements_guide.get('required_attributes') or [])
+        ordered_names.extend(requirements_guide.get('browse_attributes') or [])
+        ordered_names.extend(requirements_guide.get('recommended_attributes') or [])
+
+    ordered_names.extend(sorted(name for name in attributes.keys() if name not in ordered_names))
+    return [editors[name] for name in ordered_names if name in editors]
 
 
 @bp.route('/')
 @login_required
 def index():
-    """Listings index page - shows search interface"""
     return render_template('listings/list.html')
 
 
 @bp.route('/search')
 @login_required
 def search():
-    """Search listings"""
     try:
         service = ListingService(current_user)
-        
         if not service.is_connected():
             flash('Please connect your Amazon account first', 'warning')
             return redirect(url_for('dashboard.amazon_settings'))
-        
+
         query = request.args.get('q', '').strip()
         search_type = request.args.get('type', 'keyword')
-        
         if not query:
             flash('Please enter a search term', 'warning')
             return render_template('listings/list.html', items=[], query='', search_type=search_type)
 
         if search_type == 'asin':
-            # Search by ASIN
-            asins = [a.strip() for a in query.split(',')]
-            items = service.search_items(asins=asins)
+            items = service.search_items(asins=[asin.strip() for asin in query.split(',')])
         else:
-            # Search by keyword
             items = service.search_items(keywords=query)
-        
-        return render_template('listings/list.html', 
-                             items=items, 
-                             query=query, 
-                             search_type=search_type)
-    
+
+        return render_template('listings/list.html', items=items, query=query, search_type=search_type)
     except Exception as e:
         current_app.logger.exception("Listing search request failed")
         query = request.args.get('q', '').strip()
@@ -246,13 +233,11 @@ def search():
 @bp.route('/item/<asin>')
 @login_required
 def item_detail(asin):
-    """View item details"""
     service = ListingService(current_user)
-    
     if not service.is_connected():
         flash('Please connect your Amazon account first', 'warning')
         return redirect(url_for('dashboard.amazon_settings'))
-    
+
     try:
         item = service.get_item_details(asin)
         return render_template('listings/detail.html', item=item, asin=asin)
@@ -264,65 +249,13 @@ def item_detail(asin):
 @bp.route('/edit/<sku>', methods=['GET', 'POST'])
 @login_required
 def edit(sku):
-    """Edit listing by SKU"""
-    service = ListingService(current_user)
-    
-    if not service.is_connected():
-        flash('Please connect your Amazon account first', 'warning')
-        return redirect(url_for('dashboard.amazon_settings'))
-    
-    # Get current listing data
-    try:
-        listing = service.get_listing_by_sku(sku)
-    except Exception as e:
-        flash(f'Failed to get listing: {str(e)}', 'danger')
-        listing = {'sku': sku}
-    
-    if request.method == 'POST':
-        update_type = request.form.get('update_type')
-        
-        try:
-            if update_type == 'price':
-                price = float(request.form.get('price', 0))
-                currency = request.form.get('currency', 'INR')
-                sale_price = request.form.get('sale_price')
-                sale_price = float(sale_price) if sale_price else None
-                
-                service.update_price(sku, price, currency, sale_price)
-                flash('Price updated successfully!', 'success')
-                
-            elif update_type == 'inventory':
-                quantity = int(request.form.get('quantity', 0))
-                channel = request.form.get('fulfillment_channel', 'DEFAULT')
-                
-                service.update_inventory(sku, quantity, channel)
-                flash('Inventory updated successfully!', 'success')
-                
-            elif update_type == 'content':
-                data = {
-                    'title': request.form.get('title'),
-                    'description': request.form.get('description'),
-                    'bullet_points': [bp.strip() for bp in request.form.get('bullet_points', '').split('\n') if bp.strip()],
-                    'search_terms': request.form.get('search_terms', '').split(',')
-                }
-                
-                service.update_content(sku, data)
-                flash('Content updated successfully!', 'success')
-            
-            return redirect(url_for('listings.edit', sku=sku))
-            
-        except Exception as e:
-            flash(f'Update failed: {str(e)}', 'danger')
-    
-    return render_template('listings/edit.html', listing=listing, sku=sku)
+    return redirect(url_for('listings.manual_update', sku=sku))
 
 
 @bp.route('/manual-update', methods=['GET', 'POST'])
 @login_required
 def manual_update():
-    """Manual single-item update, starting from SKU or ASIN."""
     service = ListingService(current_user)
-
     if not service.is_connected():
         flash('Please connect your Amazon account first', 'warning')
         return redirect(url_for('dashboard.amazon_settings'))
@@ -331,7 +264,6 @@ def manual_update():
     sku = request.values.get('sku', '').strip()
     listing = {}
     catalog_item = None
-    product_attributes = {}
 
     if sku:
         try:
@@ -347,6 +279,10 @@ def manual_update():
         except Exception as e:
             flash(f'Could not load catalog item by ASIN: {str(e)}', 'warning')
 
+    loaded_product = listing if listing else catalog_item
+    product_type = (loaded_product or {}).get('product_type') if loaded_product else None
+    requirements_guide = service.get_product_requirements_guide(product_type)
+
     if request.method == 'POST':
         update_type = request.form.get('update_type')
         sku = request.form.get('sku', '').strip()
@@ -354,58 +290,43 @@ def manual_update():
 
         if not sku:
             flash('Seller SKU is required for updates, even when you start from ASIN.', 'danger')
-            return render_template(
-                'listings/manual_update.html',
-                listing=listing,
-                catalog_item=catalog_item,
-                product_attributes=_resolve_product_attributes(listing, catalog_item),
-                attribute_editors=_build_attribute_editors(listing, catalog_item),
-                sku=sku,
-                asin=asin,
-            )
+        else:
+            try:
+                if update_type == 'price':
+                    price = float(request.form.get('price', 0))
+                    currency = request.form.get('currency', 'INR')
+                    sale_price = request.form.get('sale_price', '').strip()
+                    sale_price = float(sale_price) if sale_price else None
+                    service.update_price(sku, price, currency, sale_price)
+                    flash('Price updated successfully!', 'success')
 
-        try:
-            if update_type == 'price':
-                price = float(request.form.get('price', 0))
-                currency = request.form.get('currency', 'INR')
-                sale_price = request.form.get('sale_price', '').strip()
-                sale_price = float(sale_price) if sale_price else None
-                service.update_price(sku, price, currency, sale_price)
-                flash('Price updated successfully!', 'success')
+                elif update_type == 'content':
+                    selected_fields = request.form.getlist('content_fields')
+                    if not selected_fields:
+                        raise Exception('Select at least one content attribute to update')
+                    data = _build_content_payload(request.form, selected_fields)
+                    service.update_content(sku, data)
+                    flash('Selected content attributes updated successfully!', 'success')
 
-            elif update_type == 'inventory':
-                quantity = int(request.form.get('quantity', 0))
-                channel = request.form.get('fulfillment_channel', 'DEFAULT')
-                service.update_inventory(sku, quantity, channel)
-                flash('Inventory updated successfully!', 'success')
+                elif update_type == 'attributes':
+                    if not request.form.getlist('attribute_keys'):
+                        raise Exception('Select at least one product attribute to update')
+                    data = _build_attribute_payload(request.form)
+                    service.update_attributes(sku, data)
+                    flash('Selected product attributes updated successfully!', 'success')
 
-            elif update_type == 'content':
-                selected_fields = request.form.getlist('content_fields')
-                if not selected_fields:
-                    raise Exception('Select at least one content attribute to update')
-                data = _build_content_payload(request.form, selected_fields)
-                service.update_content(sku, data)
-                flash('Selected content attributes updated successfully!', 'success')
-
-            elif update_type == 'attributes':
-                attribute_keys = request.form.getlist('attribute_keys')
-                if not attribute_keys:
-                    raise Exception('Select at least one product attribute to update')
-                data = _build_attribute_payload(request.form)
-                service.update_attributes(sku, data)
-                flash('Selected product attributes updated successfully!', 'success')
-
-            return redirect(url_for('listings.manual_update', sku=sku, asin=asin))
-        except Exception as e:
-            current_app.logger.exception("Manual listing update failed")
-            flash(f'Update failed: {str(e)}', 'danger')
+                return redirect(url_for('listings.manual_update', sku=sku, asin=asin))
+            except Exception as e:
+                current_app.logger.exception("Manual listing update failed")
+                flash(f'Update failed: {str(e)}', 'danger')
 
     return render_template(
         'listings/manual_update.html',
         listing=listing,
         catalog_item=catalog_item,
         product_attributes=_resolve_product_attributes(listing, catalog_item),
-        attribute_editors=_build_attribute_editors(listing, catalog_item),
+        attribute_editors=_build_attribute_editors(listing, catalog_item, requirements_guide=requirements_guide),
+        requirements_guide=requirements_guide,
         sku=sku,
         asin=asin,
     )
@@ -414,34 +335,29 @@ def manual_update():
 @bp.route('/bulk-update', methods=['GET', 'POST'])
 @login_required
 def bulk_update():
-    """Bulk update via CSV upload"""
     if request.method == 'POST':
         service = ListingService(current_user)
-        
         if not service.is_connected():
             flash('Please connect your Amazon account first', 'warning')
             return redirect(url_for('dashboard.amazon_settings'))
-        
-        # Check file upload
+
         if 'csv_file' not in request.files:
             flash('No file uploaded', 'danger')
             return redirect(url_for('listings.bulk_update'))
-        
+
         file = request.files['csv_file']
         if file.filename == '':
             flash('No file selected', 'danger')
             return redirect(url_for('listings.bulk_update'))
-        
+
         operation_type = request.form.get('operation_type', 'price')
         identifier_type = request.form.get('identifier_type', 'sku')
         content_fields = request.form.getlist('content_fields')
-        
+
         try:
-            # Read CSV
             stream = io.StringIO(file.stream.read().decode('utf-8'), newline=None)
             csv_reader = csv.DictReader(stream)
             csv_data = list(csv_reader)
-            
             if not csv_data:
                 flash('CSV file is empty', 'danger')
                 return redirect(url_for('listings.bulk_update'))
@@ -449,53 +365,42 @@ def bulk_update():
             if operation_type == 'content' and not content_fields:
                 flash('Select at least one content attribute for bulk content update', 'danger')
                 return redirect(url_for('listings.bulk_update'))
-            
-            # Create bulk job
+
             job_id = BulkUpdateJob.create(
                 user_id=current_user.id,
                 job_name=f"Bulk {operation_type.title()} Update",
-                total_records=len(csv_data)
+                total_records=len(csv_data),
             )
-            
-            # Process bulk update
+
             errors = []
             success_count = 0
             failed_count = 0
-            
-            for i, row in enumerate(csv_data):
+
+            for index, row in enumerate(csv_data):
                 try:
                     asin = (row.get('asin') or '').strip()
                     sku = (row.get('sku') or '').strip()
 
                     if identifier_type == 'asin' and not asin:
-                        errors.append({'row': i+1, 'error': 'ASIN is required'})
+                        errors.append({'row': index + 1, 'error': 'ASIN is required'})
                         failed_count += 1
                         continue
-
                     if not sku:
                         errors.append({
-                            'row': i+1,
+                            'row': index + 1,
                             'asin': asin or None,
-                            'error': 'SKU is required because Amazon listing updates are seller-SKU based'
+                            'error': 'SKU is required because Amazon listing updates are seller-SKU based',
                         })
                         failed_count += 1
                         continue
-                    
+
                     if operation_type == 'price':
                         service.update_price(
                             sku,
                             float(row.get('price', 0)),
                             row.get('currency', 'INR'),
-                            float(row.get('sale_price')) if row.get('sale_price') else None
+                            float(row.get('sale_price')) if row.get('sale_price') else None,
                         )
-                    
-                    elif operation_type == 'inventory':
-                        service.update_inventory(
-                            sku,
-                            int(row.get('quantity', 0)),
-                            row.get('fulfillment_channel', 'DEFAULT')
-                        )
-                    
                     elif operation_type == 'content':
                         data = {}
                         if 'title' in content_fields:
@@ -507,33 +412,26 @@ def bulk_update():
                         if 'search_terms' in content_fields:
                             data['search_terms'] = [term.strip() for term in (row.get('search_terms') or '').split('|') if term.strip()]
                         service.update_content(sku, data)
-
                     elif operation_type == 'attributes':
                         attributes_json = (row.get('attributes_json') or '').strip()
                         if not attributes_json:
                             raise Exception('attributes_json is required for attributes updates')
-                        try:
-                            data = json.loads(attributes_json)
-                        except json.JSONDecodeError as exc:
-                            raise Exception(f'Invalid attributes_json: {exc.msg}') from exc
+                        data = json.loads(attributes_json)
                         if not isinstance(data, dict):
                             raise Exception('attributes_json must be a JSON object')
                         service.update_attributes(sku, data)
-                    
+
                     success_count += 1
-                    
                 except Exception as e:
                     errors.append({
-                        'row': i+1,
+                        'row': index + 1,
                         'asin': row.get('asin'),
                         'sku': row.get('sku'),
-                        'error': str(e)
+                        'error': str(e),
                     })
                     failed_count += 1
-            
-            # Update job status
-            jobs_collection = BulkUpdateJob.get_collection()
-            jobs_collection.update_one(
+
+            BulkUpdateJob.get_collection().update_one(
                 {'_id': job_id},
                 {'$set': {
                     'processed_records': len(csv_data),
@@ -541,86 +439,68 @@ def bulk_update():
                     'failed_count': failed_count,
                     'status': 'COMPLETED' if failed_count == 0 else 'COMPLETED_WITH_ERRORS',
                     'errors': errors,
-                    'completed_at': datetime.utcnow()
+                    'completed_at': datetime.now(UTC),
                 }}
             )
-            
+
             if failed_count == 0:
                 flash(f'Bulk update completed successfully! {success_count} items updated.', 'success')
             else:
                 flash(f'Bulk update completed with {failed_count} errors. {success_count} items updated.', 'warning')
-            
             return redirect(url_for('listings.bulk_results', job_id=job_id))
-            
         except Exception as e:
             flash(f'Bulk update failed: {str(e)}', 'danger')
             return redirect(url_for('listings.bulk_update'))
-    
-    recent_jobs = list(
-        BulkUpdateJob.get_collection().find({'user_id': current_user.id}).sort('created_at', -1).limit(10)
-    )
+
+    recent_jobs = list(BulkUpdateJob.get_collection().find({'user_id': current_user.id}).sort('created_at', -1).limit(10))
     return render_template('listings/bulk_update.html', recent_jobs=recent_jobs)
 
 
 @bp.route('/bulk-results/<job_id>')
 @login_required
 def bulk_results(job_id):
-    """View bulk update results"""
-    jobs_collection = BulkUpdateJob.get_collection()
     try:
         object_id = ObjectId(job_id)
     except InvalidId:
         flash('Invalid job ID', 'danger')
         return redirect(url_for('listings.index'))
 
-    job = jobs_collection.find_one({'_id': object_id, 'user_id': current_user.id})
-    
+    job = BulkUpdateJob.get_collection().find_one({'_id': object_id, 'user_id': current_user.id})
     if not job:
         flash('Job not found', 'danger')
         return redirect(url_for('listings.index'))
-    
+
     return render_template('listings/bulk_results.html', job=job)
 
 
 @bp.route('/logs')
 @login_required
 def logs():
-    """View update logs"""
     page = request.args.get('page', 1, type=int)
     per_page = 20
-    
+
     collection = UpdateLog.get_collection()
-    logs_list = list(collection.find(
-        {'user_id': current_user.id}
-    ).sort('created_at', -1).skip((page-1)*per_page).limit(per_page))
-    
+    logs_list = list(
+        collection.find({'user_id': current_user.id}).sort('created_at', -1).skip((page - 1) * per_page).limit(per_page)
+    )
     total = collection.count_documents({'user_id': current_user.id})
-    
-    return render_template('listings/logs.html', logs=logs_list, page=page, total=total)
+
+    return render_template('listings/logs.html', logs=logs_list, page=page, total=total, per_page=per_page)
 
 
 @bp.route('/download-template/<operation_type>')
 @login_required
 def download_template(operation_type):
-    """Download CSV template for bulk upload"""
-    from flask import Response
-    
     if operation_type == 'price':
         headers = ['sku', 'price', 'currency', 'sale_price']
         sample = [
             {'sku': 'SKU001', 'price': '999.00', 'currency': 'INR', 'sale_price': '899.00'},
             {'sku': 'SKU002', 'price': '1499.00', 'currency': 'INR', 'sale_price': ''},
         ]
-    elif operation_type == 'inventory':
-        headers = ['sku', 'quantity', 'fulfillment_channel']
-        sample = [
-            {'sku': 'SKU001', 'quantity': '100', 'fulfillment_channel': 'DEFAULT'},
-            {'sku': 'SKU002', 'quantity': '50', 'fulfillment_channel': 'AMAZON'},
-        ]
     elif operation_type == 'content':
-        headers = ['sku', 'title', 'description', 'bullet_points']
+        headers = ['sku', 'title', 'description', 'bullet_points', 'search_terms']
         sample = [
-            {'sku': 'SKU001', 'title': 'Product Title', 'description': 'Product description', 'bullet_points': 'Point 1|Point 2|Point 3'},
+            {'sku': 'SKU001', 'title': 'Product Title', 'description': 'Product description', 'bullet_points': 'Point 1|Point 2|Point 3', 'search_terms': 'keyword one|keyword two'},
         ]
     elif operation_type == 'attributes':
         headers = ['sku', 'attributes_json']
@@ -630,16 +510,14 @@ def download_template(operation_type):
     else:
         flash('Invalid template type', 'danger')
         return redirect(url_for('listings.bulk_update'))
-    
+
     output = io.StringIO()
     writer = csv.DictWriter(output, fieldnames=headers)
     writer.writeheader()
     writer.writerows(sample)
-    
+
     return Response(
         output.getvalue(),
         mimetype='text/csv',
-        headers={
-            'Content-Disposition': f'attachment; filename={operation_type}_template.csv'
-        }
+        headers={'Content-Disposition': f'attachment; filename={operation_type}_template.csv'},
     )

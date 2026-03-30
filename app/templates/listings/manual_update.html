@@ -4,9 +4,21 @@
 
 {% block content %}
 <div class="row mb-4">
-    <div class="col">
+    <div class="col-lg-8">
         <h2><i class="bi bi-sliders"></i> Manual Listing Update</h2>
-        <p class="text-muted">Start with ASIN or SKU, then update only the attributes you select.</p>
+        <p class="text-muted mb-0">Load a product using ASIN or seller SKU, then update only the fields you select.</p>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <h6 class="mb-2"><i class="bi bi-compass"></i> Quick Guide</h6>
+                <ol class="small mb-0">
+                    <li>Load by ASIN or SKU</li>
+                    <li>Confirm product type and required fields</li>
+                    <li>Select only the attributes you want to change</li>
+                </ol>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -31,15 +43,13 @@
                     </button>
                 </div>
             </div>
-            <div class="form-text mt-2">
-                ASIN helps you identify the product, but Amazon updates are applied on seller SKU.
-            </div>
+            <div class="form-text mt-2">ASIN helps identify the product. Amazon listing updates are finally applied on seller SKU.</div>
         </form>
     </div>
 </div>
 
 <div class="row">
-    <div class="col-md-4">
+    <div class="col-lg-4">
         <div class="card mb-4">
             <div class="card-header bg-info text-white">
                 <i class="bi bi-info-circle"></i> Loaded Product
@@ -49,35 +59,89 @@
                 {% if product %}
                 <table class="table table-sm table-borderless mb-0">
                     <tr>
-                        <td><strong>ASIN:</strong></td>
+                        <td><strong>ASIN</strong></td>
                         <td><code>{{ asin or product.asin or 'N/A' }}</code></td>
                     </tr>
                     <tr>
-                        <td><strong>SKU:</strong></td>
+                        <td><strong>SKU</strong></td>
                         <td><code>{{ sku or product.sku or 'Enter manually' }}</code></td>
                     </tr>
                     <tr>
-                        <td><strong>Title:</strong></td>
+                        <td><strong>Title</strong></td>
                         <td>{{ product.title or 'Untitled product' }}</td>
                     </tr>
                     <tr>
-                        <td><strong>Brand:</strong></td>
+                        <td><strong>Brand</strong></td>
                         <td>{{ product.brand or 'Unknown' }}</td>
+                    </tr>
+                    <tr>
+                        <td><strong>Product Type</strong></td>
+                        <td><span class="badge bg-secondary">{{ product.product_type or 'Unknown' }}</span></td>
                     </tr>
                 </table>
                 {% else %}
-                <p class="text-muted mb-0">Load an ASIN or SKU to start manual updates.</p>
+                <p class="text-muted mb-0">Load an ASIN or SKU to start editing.</p>
                 {% endif %}
             </div>
         </div>
+
+        {% if requirements_guide %}
+        <div class="card mb-4 border-warning">
+            <div class="card-header bg-warning text-dark">
+                <i class="bi bi-journal-check"></i> Product-Type Guide
+            </div>
+            <div class="card-body">
+                <div class="small text-muted mb-3">
+                    Amazon validates updates against <strong>{{ requirements_guide.product_type }}</strong> requirements.
+                </div>
+                <div class="mb-3">
+                    <strong class="small">Requirements Mode</strong>
+                    <div><span class="badge bg-dark">{{ requirements_guide.requirements }}</span> <span class="badge bg-secondary">{{ requirements_guide.requirements_enforced }}</span></div>
+                </div>
+                {% if requirements_guide.required_attributes %}
+                <div class="mb-3">
+                    <strong class="small">Common required attributes</strong>
+                    <div class="mt-2">
+                        {% for attr in requirements_guide.required_attributes %}
+                        <span class="badge bg-danger-subtle text-dark border me-1 mb-1">{{ attr }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if requirements_guide.browse_attributes %}
+                <div class="mb-3">
+                    <strong class="small">Browse-node / RBN related</strong>
+                    <div class="mt-2">
+                        {% for attr in requirements_guide.browse_attributes %}
+                        <span class="badge bg-primary-subtle text-dark border me-1 mb-1">{{ attr }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+                {% if requirements_guide.recommended_attributes %}
+                <div>
+                    <strong class="small">Other editable attributes</strong>
+                    <div class="mt-2">
+                        {% for attr in requirements_guide.recommended_attributes[:12] %}
+                        <span class="badge bg-light text-dark border me-1 mb-1">{{ attr }}</span>
+                        {% endfor %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
     </div>
 
-    <div class="col-md-8">
+    <div class="col-lg-8">
         <div class="card mb-4">
             <div class="card-header">
                 <i class="bi bi-currency-dollar"></i> Price Update
             </div>
             <div class="card-body">
+                <div class="alert alert-light border small">
+                    Use this when only commercial pricing needs to change. Inventory editing is intentionally disabled in this tool.
+                </div>
                 <form method="POST" action="{{ url_for('listings.manual_update') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="price">
@@ -111,40 +175,12 @@
 
         <div class="card mb-4">
             <div class="card-header">
-                <i class="bi bi-box-seam"></i> Inventory Update
-            </div>
-            <div class="card-body">
-                <form method="POST" action="{{ url_for('listings.manual_update') }}">
-                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="update_type" value="inventory">
-                    <input type="hidden" name="asin" value="{{ asin or '' }}">
-                    <div class="row g-3">
-                        <div class="col-md-4">
-                            <label class="form-label">Seller SKU</label>
-                            <input type="text" class="form-control" name="sku" value="{{ sku or '' }}" required>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Quantity</label>
-                            <input type="number" class="form-control" name="quantity" min="0" required>
-                        </div>
-                        <div class="col-md-4">
-                            <label class="form-label">Fulfillment Channel</label>
-                            <select class="form-select" name="fulfillment_channel">
-                                <option value="DEFAULT">FBM</option>
-                                <option value="AMAZON">FBA</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn btn-primary mt-3">Update Inventory</button>
-                </form>
-            </div>
-        </div>
-
-        <div class="card">
-            <div class="card-header">
                 <i class="bi bi-file-text"></i> Content Update
             </div>
             <div class="card-body">
+                <div class="alert alert-light border small">
+                    Choose only the customer-facing fields you want to change. Unselected fields remain untouched.
+                </div>
                 <form method="POST" action="{{ url_for('listings.manual_update') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="content">
@@ -196,6 +232,7 @@
                     <div class="mb-3 content-input" data-field="bullet_points">
                         <label class="form-label">Bullet Points</label>
                         <textarea class="form-control" name="bullet_points" rows="5">{{ '\n'.join(listing.bullet_points) if listing and listing.bullet_points else ('\n'.join(catalog_item.bullet_points) if catalog_item and catalog_item.bullet_points else '') }}</textarea>
+                        <div class="form-text">One bullet per line.</div>
                     </div>
 
                     <div class="mb-3 content-input" data-field="search_terms">
@@ -203,17 +240,20 @@
                         <input type="text" class="form-control" name="search_terms" placeholder="keyword1, keyword2, keyword3">
                     </div>
 
-                    <button type="submit" class="btn btn-primary">Update Selected Attributes</button>
+                    <button type="submit" class="btn btn-primary">Update Selected Content</button>
                 </form>
             </div>
         </div>
 
-        <div class="card mt-4">
+        <div class="card">
             <div class="card-header">
-                <i class="bi bi-braces"></i> Advanced Attribute Editor
+                <i class="bi bi-braces"></i> Product Attribute Editor
             </div>
             <div class="card-body">
                 {% if attribute_editors %}
+                <div class="alert alert-light border small">
+                    Start with required and browse-node fields first. Friendly controls are shown when Amazon returns a simple shape; raw JSON is only used for complex fields.
+                </div>
                 <form method="POST" action="{{ url_for('listings.manual_update') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="attributes">
@@ -224,19 +264,24 @@
                         <input type="text" class="form-control" name="sku" value="{{ sku or '' }}" required>
                     </div>
 
-                    <div class="alert alert-info">
-                        Select only the product attributes you want to update. Common attributes are shown as friendly fields; unsupported shapes fall back to raw JSON.
-                    </div>
-
                     {% for attribute in attribute_editors %}
-                    <div class="border rounded p-3 mb-3">
-                        <div class="form-check mb-2">
-                            <input class="form-check-input advanced-attribute-toggle" type="checkbox" name="attribute_keys" value="{{ attribute.name }}" id="attr-{{ loop.index }}">
-                            <label class="form-check-label fw-semibold" for="attr-{{ loop.index }}">{{ attribute.label }}</label>
+                    {% set is_required = requirements_guide and attribute.name in requirements_guide.required_attributes %}
+                    {% set is_browse = requirements_guide and attribute.name in requirements_guide.browse_attributes %}
+                    <div class="border rounded p-3 mb-3 attribute-card">
+                        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div class="form-check m-0">
+                                <input class="form-check-input advanced-attribute-toggle" type="checkbox" name="attribute_keys" value="{{ attribute.name }}" id="attr-{{ loop.index }}">
+                                <label class="form-check-label fw-semibold" for="attr-{{ loop.index }}">{{ attribute.label }}</label>
+                            </div>
+                            <div>
+                                {% if is_required %}<span class="badge bg-danger me-1">Required</span>{% endif %}
+                                {% if is_browse %}<span class="badge bg-primary me-1">Browse / RBN</span>{% endif %}
+                                <span class="badge bg-light text-dark border">{{ attribute.mode.replace('_', ' ') }}</span>
+                            </div>
                         </div>
                         <input type="hidden" name="attribute_mode__{{ attribute.name }}" value="{{ attribute.mode }}">
                         <input type="hidden" name="attribute_original__{{ attribute.name }}" value="{{ product_attributes[attribute.name]|tojson }}">
-                        <div class="advanced-attribute-input d-none">
+                        <div class="advanced-attribute-input d-none mt-3">
                             {% if attribute.mode == 'text' %}
                             <input type="text" class="form-control" name="attr_value__{{ attribute.name }}" value="{{ attribute.value }}">
                             {% elif attribute.mode == 'number' %}
@@ -278,17 +323,17 @@
                                 </div>
                             </div>
                             {% else %}
-                            <textarea class="form-control" rows="6" name="attr_json__{{ attribute.name }}">{{ attribute.json_value }}</textarea>
-                            <div class="form-text">Advanced JSON mode</div>
+                            <textarea class="form-control font-monospace" rows="6" name="attr_json__{{ attribute.name }}">{{ attribute.json_value }}</textarea>
+                            <div class="form-text">Use this only for complex Amazon attribute shapes.</div>
                             {% endif %}
                         </div>
                     </div>
                     {% endfor %}
 
-                    <button type="submit" class="btn btn-dark">Update Selected Product Attributes</button>
+                    <button type="submit" class="btn btn-dark">Update Selected Attributes</button>
                 </form>
                 {% else %}
-                <p class="text-muted mb-0">Load a listing first to inspect and edit its full Amazon attributes.</p>
+                <p class="text-muted mb-0">Load a listing first to inspect and edit its Amazon attributes.</p>
                 {% endif %}
             </div>
         </div>
@@ -313,8 +358,8 @@ syncContentFields();
 
 document.querySelectorAll('.advanced-attribute-toggle').forEach((el) => {
     el.addEventListener('change', function() {
-        const textarea = this.closest('.border').querySelector('.advanced-attribute-input');
-        textarea.classList.toggle('d-none', !this.checked);
+        const container = this.closest('.attribute-card').querySelector('.advanced-attribute-input');
+        container.classList.toggle('d-none', !this.checked);
     });
 });
 </script>

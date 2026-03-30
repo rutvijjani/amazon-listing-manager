@@ -84,11 +84,11 @@
             <div class="card-body">
                 <div class="d-flex justify-content-between">
                     <div>
-                        <h6 class="card-title">Pending</h6>
-                        <h3 class="mb-0">{{ stats.pending_updates }}</h3>
+                        <h6 class="card-title">Pending Invites</h6>
+                        <h3 class="mb-0">{{ stats.pending_invites }}</h3>
                     </div>
                     <div class="align-self-center">
-                        <i class="bi bi-clock fs-1"></i>
+                        <i class="bi bi-envelope fs-1"></i>
                     </div>
                 </div>
             </div>
@@ -108,8 +108,14 @@
                     <a href="{{ url_for('listings.index') }}" class="list-group-item list-group-item-action">
                         <i class="bi bi-search"></i> Search Listings
                     </a>
+                    <a href="{{ url_for('listings.manual_update') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-sliders"></i> Manual Update
+                    </a>
                     <a href="{{ url_for('listings.bulk_update') }}" class="list-group-item list-group-item-action">
                         <i class="bi bi-upload"></i> Bulk Update via CSV
+                    </a>
+                    <a href="{{ url_for('dashboard.team_access') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-people"></i> Team Access
                     </a>
                     <a href="{{ url_for('dashboard.amazon_settings') }}" class="list-group-item list-group-item-action">
                         <i class="bi bi-gear"></i> Amazon Settings
@@ -126,7 +132,7 @@
     <div class="col-md-8 mb-4">
         <div class="card h-100">
             <div class="card-header d-flex justify-content-between align-items-center">
-                <span><i class="bi bi-clock-history"></i> Recent Activity</span>
+                <span><i class="bi bi-clock-history"></i> Your Activity</span>
                 <a href="{{ url_for('listings.logs') }}" class="btn btn-sm btn-outline-primary">View All</a>
             </div>
             <div class="card-body p-0">
@@ -173,6 +179,40 @@
         </div>
     </div>
 </div>
+
+{% if recent_invites %}
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-header">
+                <i class="bi bi-envelope-paper"></i> Recent Invites Sent By You
+            </div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Email</th>
+                                <th>Status</th>
+                                <th>Created</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for invite in recent_invites %}
+                            <tr>
+                                <td>{{ invite.email }}</td>
+                                <td><span class="badge bg-secondary">{{ invite.status }}</span></td>
+                                <td>{{ invite.created_at.strftime('%Y-%m-%d %H:%M') if invite.created_at else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endif %}
 
 <!-- Recent Bulk Jobs -->
 {% if recent_jobs %}

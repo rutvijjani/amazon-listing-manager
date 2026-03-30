@@ -2,11 +2,13 @@
 MongoDB Models for Amazon Listing Manager
 """
 
-from flask import current_app
-from werkzeug.security import generate_password_hash, check_password_hash
-from datetime import datetime
+import secrets
+from datetime import datetime, timedelta, UTC
+
 from bson.objectid import ObjectId
 from flask_login import UserMixin
+from werkzeug.security import generate_password_hash, check_password_hash
+
 from app import mongo
 
 
@@ -22,8 +24,9 @@ class User(UserMixin):
         self.email = user_data.get('email', '')
         self.password_hash = user_data.get('password_hash', '')
         self.name = user_data.get('name', '')
-        self.created_at = user_data.get('created_at', datetime.utcnow())
+        self.created_at = user_data.get('created_at', datetime.now(UTC))
         self._is_active = user_data.get('is_active', True)
+        self.invited_by_user_id = user_data.get('invited_by_user_id')
     
     @property
     def id(self):
@@ -43,6 +46,10 @@ class User(UserMixin):
         collection = cls.get_collection()
         user_data = collection.find_one({'email': email.lower()})
         return cls(user_data) if user_data else None
+
+    @classmethod
+    def count_all(cls):
+        return cls.get_collection().count_documents({})
     
     @classmethod
     def find_by_id(cls, user_id):
@@ -73,8 +80,9 @@ class User(UserMixin):
             'email': self.email.lower() if self.email else '',
             'password_hash': self.password_hash,
             'name': self.name,
-            'created_at': self.created_at if isinstance(self.created_at, datetime) else datetime.utcnow(),
-            'is_active': self.is_active
+            'created_at': self.created_at if isinstance(self.created_at, datetime) else datetime.now(UTC),
+            'is_active': self.is_active,
+            'invited_by_user_id': self.invited_by_user_id,
         }
         
         if self._id:
@@ -136,8 +144,8 @@ class AmazonConnection:
         self.access_token_encrypted = data.get('access_token_encrypted')
         self.token_expires_at = data.get('token_expires_at')
         self.is_active = data.get('is_active', True)
-        self.created_at = data.get('created_at', datetime.utcnow())
-        self.updated_at = data.get('updated_at', datetime.utcnow())
+        self.created_at = data.get('created_at', datetime.now(UTC))
+        self.updated_at = data.get('updated_at', datetime.now(UTC))
     
     @staticmethod
     def get_collection():
@@ -156,8 +164,8 @@ class AmazonConnection:
             'access_token_encrypted': self.access_token_encrypted,
             'token_expires_at': self.token_expires_at,
             'is_active': self.is_active,
-            'created_at': self.created_at if isinstance(self.created_at, datetime) else datetime.utcnow(),
-            'updated_at': datetime.utcnow()
+            'created_at': self.created_at if isinstance(self.created_at, datetime) else datetime.now(UTC),
+            'updated_at': datetime.now(UTC)
         }
         
         if self._id:
@@ -190,7 +198,7 @@ class UpdateLog:
             'status': status,
             'error_message': None,
             'amazon_feed_id': None,
-            'created_at': datetime.utcnow(),
+            'created_at': datetime.now(UTC),
             'completed_at': None
         }
         return collection.insert_one(data)
@@ -226,9 +234,86 @@ class BulkUpdateJob:
             'failed_count': 0,
             'status': 'PENDING',
             'errors': [],
-            'created_at': datetime.utcnow(),
+            'created_at': datetime.now(UTC),
             'started_at': None,
             'completed_at': None
         }
         result = collection.insert_one(data)
         return result.inserted_id
+
+
+class Invitation:
+    """Invite-only registration records."""
+
+    collection_name = 'invitations'
+
+    def __init__(self, data=None):
+        data = data or {}
+        self._id = data.get('_id')
+        self.email = (data.get('email') or '').lower()
+        self.token = data.get('token') or secrets.token_urlsafe(24)
+        self.invited_by_user_id = data.get('invited_by_user_id')
+        self.status = data.get('status', 'PENDING')
+        self.created_at = data.get('created_at', datetime.now(UTC))
+        self.expires_at = data.get('expires_at', datetime.now(UTC) + timedelta(days=7))
+        self.accepted_at = data.get('accepted_at')
+        self.accepted_user_id = data.get('accepted_user_id')
+
+    @staticmethod
+    def get_collection():
+        return mongo.db[Invitation.collection_name]
+
+    def save(self):
+        collection = self.get_collection()
+        data = {
+            'email': self.email,
+            'token': self.token,
+            'invited_by_user_id': self.invited_by_user_id,
+            'status': self.status,
+            'created_at': self.created_at if isinstance(self.created_at, datetime) else datetime.now(UTC),
+            'expires_at': self.expires_at if isinstance(self.expires_at, datetime) else datetime.now(UTC) + timedelta(days=7),
+            'accepted_at': self.accepted_at,
+            'accepted_user_id': self.accepted_user_id,
+        }
+
+        if self._id:
+            collection.update_one({'_id': self._id}, {'$set': data})
+        else:
+            result = collection.insert_one(data)
+            self._id = result.inserted_id
+        return self
+
+    @classmethod
+    def find_valid_by_token(cls, token):
+        if not token:
+            return None
+        now = datetime.now(UTC)
+        data = cls.get_collection().find_one({
+            'token': token,
+            'status': 'PENDING',
+            'expires_at': {'$gt': now},
+        })
+        return cls(data) if data else None
+
+    @classmethod
+    def find_latest_pending_for_email(cls, email):
+        if not email:
+            return None
+        data = cls.get_collection().find_one({
+            'email': email.lower(),
+            'status': 'PENDING',
+        })
+        return cls(data) if data else None
+
+    @classmethod
+    def get_recent_for_inviter(cls, inviter_user_id, limit=20):
+        return list(
+            cls.get_collection().find({'invited_by_user_id': inviter_user_id}).sort('created_at', -1).limit(limit)
+        )
+
+    def mark_accepted(self, user_id):
+        self.status = 'ACCEPTED'
+        self.accepted_user_id = user_id
+        self.accepted_at = datetime.now(UTC)
+        self.save()
+

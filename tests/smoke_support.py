@@ -36,7 +36,15 @@ class FakeCollection:
 
     def _matches(self, doc, query):
         for key, value in query.items():
-            if doc.get(key) != value:
+            if isinstance(value, dict):
+                doc_value = doc.get(key)
+                for operator, operand in value.items():
+                    if operator == "$gt":
+                        if not (doc_value and doc_value > operand):
+                            return False
+                    else:
+                        return False
+            elif doc.get(key) != value:
                 return False
         return True
 
@@ -99,6 +107,7 @@ class FakeDB:
         self.amazon_connections = FakeCollection()
         self.update_logs = FakeCollection()
         self.bulk_update_jobs = FakeCollection()
+        self.invitations = FakeCollection()
 
     def __getitem__(self, name):
         return getattr(self, name)
@@ -152,3 +161,6 @@ def attach_connection(email="qa@example.com"):
     )
     connection.save()
     return user
+
+
+

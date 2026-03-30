@@ -4,14 +4,29 @@
 
 {% block content %}
 <div class="row justify-content-center">
-    <div class="col-md-5">
+    <div class="col-md-6">
         <div class="card shadow">
             <div class="card-header bg-success text-white text-center py-3">
                 <h4 class="mb-0"><i class="bi bi-person-plus"></i> Create Account</h4>
             </div>
             <div class="card-body p-4">
+                {% if bootstrap_allowed %}
+                <div class="alert alert-info">
+                    This is the first account for this workspace, so bootstrap registration is allowed.
+                </div>
+                {% elif invitation %}
+                <div class="alert alert-success">
+                    Invite confirmed for <strong>{{ invitation.email }}</strong>. Register using the same email to activate access.
+                </div>
+                {% else %}
+                <div class="alert alert-warning">
+                    Registration is invite-only. Ask an existing user to invite your email address first.
+                </div>
+                {% endif %}
+
                 <form method="POST" action="{{ url_for('auth.register') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="invite_token" value="{{ invite_token or '' }}">
                     <div class="mb-3">
                         <label for="name" class="form-label">Full Name</label>
                         <input type="text" class="form-control" id="name" name="name" 
@@ -21,7 +36,11 @@
                     <div class="mb-3">
                         <label for="email" class="form-label">Email Address</label>
                         <input type="email" class="form-control" id="email" name="email" 
-                               value="{{ email or '' }}" required autofocus>
+                               value="{{ email or invitation.email or '' }}" required autofocus
+                               {% if invitation and not email %}readonly{% endif %}>
+                        {% if invitation %}
+                        <div class="form-text">Only this invited email can use the link.</div>
+                        {% endif %}
                     </div>
                     
                     <div class="mb-3">
@@ -51,6 +70,12 @@
                         <a href="{{ url_for('auth.login') }}">Login here</a>
                     </p>
                 </div>
+
+                {% if not bootstrap_allowed and not invitation %}
+                <div class="mt-3 text-center text-muted small">
+                    If someone invited you, open the registration link sent to your inbox.
+                </div>
+                {% endif %}
             </div>
         </div>
     </div>

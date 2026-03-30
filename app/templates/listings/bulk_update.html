@@ -4,15 +4,26 @@
 
 {% block content %}
 <div class="row mb-4">
-    <div class="col">
+    <div class="col-lg-8">
         <h2><i class="bi bi-upload"></i> Bulk Update</h2>
-        <p class="text-muted">Update multiple listings at once using CSV upload</p>
+        <p class="text-muted mb-0">Update multiple listings with guided CSV uploads for price, content, or structured attributes.</p>
+    </div>
+    <div class="col-lg-4">
+        <div class="card border-info">
+            <div class="card-body">
+                <h6 class="mb-2"><i class="bi bi-compass"></i> Quick Guide</h6>
+                <ol class="small mb-0">
+                    <li>Pick update type</li>
+                    <li>Download the matching template</li>
+                    <li>Keep SKU in every row</li>
+                </ol>
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="row">
     <div class="col-md-8">
-        <!-- Upload Form -->
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
                 <i class="bi bi-cloud-upload"></i> Upload CSV File
@@ -24,7 +35,6 @@
                         <label for="operation_type" class="form-label">Update Type</label>
                         <select class="form-select" id="operation_type" name="operation_type" required>
                             <option value="price">Price Update</option>
-                            <option value="inventory">Inventory Update</option>
                             <option value="content">Content Update</option>
                             <option value="attributes">Attributes Update</option>
                         </select>
@@ -36,9 +46,7 @@
                             <option value="sku">SKU</option>
                             <option value="asin">ASIN</option>
                         </select>
-                        <div class="form-text">
-                            ASIN mode still requires a <code>sku</code> column, because Amazon listing updates are applied on seller SKU.
-                        </div>
+                        <div class="form-text">Even in ASIN mode, keep a <code>sku</code> column because Amazon listing updates are seller-SKU based.</div>
                     </div>
 
                     <div class="mb-3 d-none" id="content-fields-box">
@@ -70,25 +78,18 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="mb-3">
                         <label for="csv_file" class="form-label">CSV File</label>
-                        <input type="file" class="form-control" id="csv_file" name="csv_file" 
-                               accept=".csv" required>
-                        <div class="form-text">
-                            Upload a CSV file with the required columns for your selected update type.
-                        </div>
+                        <input type="file" class="form-control" id="csv_file" name="csv_file" accept=".csv" required>
+                        <div class="form-text">Upload UTF-8 CSV. Keep the header row exactly as shown in the preview.</div>
                     </div>
-                    
+
                     <div class="mb-3">
-                        <label class="form-label">CSV Format Preview:</label>
-                        <div id="format-preview" class="bg-light p-3 rounded">
-                            <code class="d-block mb-2">sku,price,currency,sale_price</code>
-                            <small class="text-muted">SKU001,999.00,INR,899.00</small><br>
-                            <small class="text-muted">SKU002,1499.00,INR,</small>
-                        </div>
+                        <label class="form-label">CSV Format Preview</label>
+                        <div id="format-preview" class="bg-light p-3 rounded"></div>
                     </div>
-                    
+
                     <div class="d-grid">
                         <button type="submit" class="btn btn-primary btn-lg">
                             <i class="bi bi-upload"></i> Start Bulk Update
@@ -98,86 +99,50 @@
             </div>
         </div>
     </div>
-    
+
     <div class="col-md-4">
-        <!-- Download Templates -->
         <div class="card mb-4">
             <div class="card-header">
                 <i class="bi bi-download"></i> Download Templates
             </div>
             <div class="card-body">
-                <p class="small text-muted">Download sample CSV templates:</p>
                 <div class="list-group">
-                    <a href="{{ url_for('listings.download_template', operation_type='price') }}" 
-                       class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-spreadsheet"></i> Price Update Template
+                    <a href="{{ url_for('listings.download_template', operation_type='price') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> Price Template
                     </a>
-                    <a href="{{ url_for('listings.download_template', operation_type='inventory') }}" 
-                       class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-spreadsheet"></i> Inventory Update Template
+                    <a href="{{ url_for('listings.download_template', operation_type='content') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> Content Template
                     </a>
-                    <a href="{{ url_for('listings.download_template', operation_type='content') }}" 
-                       class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-spreadsheet"></i> Content Update Template
-                    </a>
-                    <a href="{{ url_for('listings.download_template', operation_type='attributes') }}" 
-                       class="list-group-item list-group-item-action">
-                        <i class="bi bi-file-earmark-spreadsheet"></i> Attributes Update Template
+                    <a href="{{ url_for('listings.download_template', operation_type='attributes') }}" class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> Attributes Template
                     </a>
                 </div>
             </div>
         </div>
-        
-        <!-- Instructions -->
+
         <div class="card">
             <div class="card-header">
-                <i class="bi bi-info-circle"></i> Instructions
+                <i class="bi bi-info-circle"></i> Guide
             </div>
             <div class="card-body">
-                <h6>CSV Format Requirements:</h6>
-                <ul class="small">
-                    <li>First row must contain column headers</li>
-                    <li>SKU column is required for all updates</li>
-                    <li>For ASIN mode, include both <code>asin</code> and <code>sku</code> columns</li>
-                    <li>Use UTF-8 encoding for special characters</li>
-                    <li>Maximum 10,000 rows per file</li>
+                <ul class="small mb-3">
+                    <li>Inventory updates are intentionally disabled.</li>
+                    <li>Use content mode for title, description, bullets, and search terms.</li>
+                    <li>Use attributes mode when the product type requires other Amazon attributes.</li>
+                    <li>For product-type specific fields, load one item first in Manual Update and copy the attribute names from there.</li>
                 </ul>
-                
-                <h6 class="mt-3">Column Descriptions:</h6>
-                <dl class="small">
-                    <dt>sku</dt>
-                    <dd>Your seller SKU (required for every update)</dd>
-
-                    <dt>asin</dt>
-                    <dd>Amazon ASIN (optional in SKU mode, required in ASIN mode)</dd>
-                    
-                    <dt>price</dt>
-                    <dd>Product price (for price updates)</dd>
-                    
-                    <dt>currency</dt>
-                    <dd>Currency code: INR, USD, EUR, etc.</dd>
-                    
-                    <dt>quantity</dt>
-                    <dd>Available inventory quantity</dd>
-                    
-                    <dt>fulfillment_channel</dt>
-                    <dd>DEFAULT (FBM) or AMAZON (FBA)</dd>
-
-                    <dt>attributes_json</dt>
-                    <dd>JSON object of top-level Amazon attributes for generic attribute updates</dd>
-                </dl>
+                <div class="small text-muted">Amazon validates rows against marketplace + product-type rules, so structured attribute names matter.</div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Recent Bulk Jobs -->
 {% if recent_jobs %}
 <div class="row mt-4">
     <div class="col-12">
         <div class="card">
             <div class="card-header">
-                <i class="bi bi-clock-history"></i> Recent Bulk Jobs
+                <i class="bi bi-clock-history"></i> Your Recent Bulk Jobs
             </div>
             <div class="card-body p-0">
                 <div class="table-responsive">
@@ -196,25 +161,11 @@
                             {% for job in recent_jobs %}
                             <tr>
                                 <td>{{ job.job_name }}</td>
-                                <td>
-                                    {% if job.status == 'COMPLETED' %}
-                                    <span class="badge bg-success">Completed</span>
-                                    {% elif job.status == 'COMPLETED_WITH_ERRORS' %}
-                                    <span class="badge bg-warning">Completed w/ Errors</span>
-                                    {% elif job.status == 'PROCESSING' %}
-                                    <span class="badge bg-primary">Processing</span>
-                                    {% elif job.status == 'FAILED' %}
-                                    <span class="badge bg-danger">Failed</span>
-                                    {% else %}
-                                    <span class="badge bg-secondary">{{ job.status }}</span>
-                                    {% endif %}
-                                </td>
+                                <td><span class="badge bg-secondary">{{ job.status }}</span></td>
                                 <td>
                                     <div class="progress" style="height: 20px;">
                                         {% set pct = (job.processed_records / job.total_records * 100) if job.total_records else 0 %}
-                                        <div class="progress-bar" role="progressbar" style="width: {{ pct }}%">
-                                            {{ job.processed_records }}/{{ job.total_records }}
-                                        </div>
+                                        <div class="progress-bar" role="progressbar" style="width: {{ pct }}%">{{ job.processed_records }}/{{ job.total_records }}</div>
                                     </div>
                                 </td>
                                 <td>
@@ -224,12 +175,7 @@
                                     {% endif %}
                                 </td>
                                 <td>{{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else '-' }}</td>
-                                <td>
-                                    <a href="{{ url_for('listings.bulk_results', job_id=job._id) }}" 
-                                       class="btn btn-sm btn-outline-primary">
-                                        View Details
-                                    </a>
-                                </td>
+                                <td><a href="{{ url_for('listings.bulk_results', job_id=job._id) }}" class="btn btn-sm btn-outline-primary">View Details</a></td>
                             </tr>
                             {% endfor %}
                         </tbody>
@@ -244,58 +190,35 @@
 
 {% block extra_js %}
 <script>
-// Update format preview based on operation type
-document.getElementById('operation_type').addEventListener('change', function() {
+function updatePreview() {
     const preview = document.getElementById('format-preview');
-    const type = this.value;
+    const type = document.getElementById('operation_type').value;
     const identifierType = document.getElementById('identifier_type').value;
     const contentFieldsBox = document.getElementById('content-fields-box');
 
     contentFieldsBox.classList.toggle('d-none', type !== 'content');
-    
+
     if (type === 'price') {
-        preview.innerHTML = identifierType === 'asin' ? `
-            <code class="d-block mb-2">asin,sku,price,currency,sale_price</code>
-            <small class="text-muted">B0XXXXXXX,SKU001,999.00,INR,899.00</small><br>
-            <small class="text-muted">B0YYYYYYY,SKU002,1499.00,INR,</small>
-        ` : `
-            <code class="d-block mb-2">sku,price,currency,sale_price</code>
-            <small class="text-muted">SKU001,999.00,INR,899.00</small><br>
-            <small class="text-muted">SKU002,1499.00,INR,</small>
-        `;
-    } else if (type === 'inventory') {
-        preview.innerHTML = identifierType === 'asin' ? `
-            <code class="d-block mb-2">asin,sku,quantity,fulfillment_channel</code>
-            <small class="text-muted">B0XXXXXXX,SKU001,100,DEFAULT</small><br>
-            <small class="text-muted">B0YYYYYYY,SKU002,50,AMAZON</small>
-        ` : `
-            <code class="d-block mb-2">sku,quantity,fulfillment_channel</code>
-            <small class="text-muted">SKU001,100,DEFAULT</small><br>
-            <small class="text-muted">SKU002,50,AMAZON</small>
-        `;
-    } else if (type === 'content') {
-        preview.innerHTML = identifierType === 'asin' ? `
-            <code class="d-block mb-2">asin,sku,title,description,bullet_points,search_terms</code>
-            <small class="text-muted">B0XXXXXXX,SKU001,Product Title,Description,Point 1|Point 2,new keyword|another keyword</small>
-        ` : `
-            <code class="d-block mb-2">sku,title,description,bullet_points,search_terms</code>
-            <small class="text-muted">SKU001,Product Title,Description,Point 1|Point 2,new keyword|another keyword</small>
-        `;
-    } else if (type === 'attributes') {
-        preview.innerHTML = identifierType === 'asin' ? `
-            <code class="d-block mb-2">asin,sku,attributes_json</code>
-            <small class="text-muted">B0XXXXXXX,SKU001,{"item_name":[{"value":"Updated title","marketplace_id":"A21TJRUUN4KGV"}]}</small>
-        ` : `
-            <code class="d-block mb-2">sku,attributes_json</code>
-            <small class="text-muted">SKU001,{"item_name":[{"value":"Updated title","marketplace_id":"A21TJRUUN4KGV"}]}</small>
-        `;
+        preview.innerHTML = identifierType === 'asin' ?
+            '<code class="d-block mb-2">asin,sku,price,currency,sale_price</code><small class="text-muted">B0XXXXXXX,SKU001,999.00,INR,899.00</small>' :
+            '<code class="d-block mb-2">sku,price,currency,sale_price</code><small class="text-muted">SKU001,999.00,INR,899.00</small>';
+        return;
     }
-});
 
-document.getElementById('identifier_type').addEventListener('change', function() {
-    document.getElementById('operation_type').dispatchEvent(new Event('change'));
-});
+    if (type === 'content') {
+        preview.innerHTML = identifierType === 'asin' ?
+            '<code class="d-block mb-2">asin,sku,title,description,bullet_points,search_terms</code><small class="text-muted">B0XXXXXXX,SKU001,New title,New description,Point 1|Point 2,keyword one|keyword two</small>' :
+            '<code class="d-block mb-2">sku,title,description,bullet_points,search_terms</code><small class="text-muted">SKU001,New title,New description,Point 1|Point 2,keyword one|keyword two</small>';
+        return;
+    }
 
-document.getElementById('operation_type').dispatchEvent(new Event('change'));
+    preview.innerHTML = identifierType === 'asin' ?
+        '<code class="d-block mb-2">asin,sku,attributes_json</code><small class="text-muted">B0XXXXXXX,SKU001,{&quot;item_name&quot;:[{&quot;value&quot;:&quot;Updated title&quot;,&quot;marketplace_id&quot;:&quot;A21TJRUUN4KGV&quot;}]}</small>' :
+        '<code class="d-block mb-2">sku,attributes_json</code><small class="text-muted">SKU001,{&quot;item_name&quot;:[{&quot;value&quot;:&quot;Updated title&quot;,&quot;marketplace_id&quot;:&quot;A21TJRUUN4KGV&quot;}]}</small>';
+}
+
+document.getElementById('operation_type').addEventListener('change', updatePreview);
+document.getElementById('identifier_type').addEventListener('change', updatePreview);
+updatePreview();
 </script>
 {% endblock %}

@@ -105,29 +105,10 @@ def update_price():
 @bp.route('/update-inventory', methods=['POST'])
 @login_required
 def update_inventory():
-    """API endpoint to update inventory"""
-    service = ListingService(current_user)
-    
-    if not service.is_connected():
-        return jsonify({'error': 'Amazon account not connected'}), 400
-    
-    data = request.get_json()
-    
-    try:
-        log = service.update_inventory(
-            sku=data.get('sku'),
-            quantity=int(data.get('quantity', 0)),
-            fulfillment_channel=data.get('fulfillment_channel', 'DEFAULT')
-        )
-        
-        return jsonify({
-            'success': True,
-            'log_id': str(log) if log else None,
-            'status': 'SUCCESS'
-        })
-    
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    """Inventory editing is intentionally disabled in this app."""
+    return jsonify({
+        'error': 'Inventory updates are disabled. Use price, content, or attribute editing instead.'
+    }), 410
 
 
 @bp.route('/stats')

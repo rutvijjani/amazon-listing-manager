@@ -2,9 +2,11 @@
 Dashboard Routes for MongoDB
 """
 
-from flask import Blueprint, render_template, redirect, url_for
+from datetime import datetime, UTC
+
+from flask import Blueprint, redirect, render_template, url_for
 from flask_login import login_required, current_user
-from app.models import User, UpdateLog, BulkUpdateJob
+from app.models import BulkUpdateJob, Invitation, UpdateLog
 
 bp = Blueprint('dashboard', __name__)
 
@@ -17,8 +19,9 @@ def index():
     has_connection = current_user.has_amazon_connection()
     connection = current_user.get_active_connection()
     
-    # Get recent activity
+    # Get recent activity (always scoped to the current user)
     recent_logs = UpdateLog.get_recent_by_user(current_user.id, limit=10)
+    recent_invites = Invitation.get_recent_for_inviter(current_user.id, limit=5)
     
     # Get stats
     collection = UpdateLog.get_collection()
@@ -27,6 +30,7 @@ def index():
         'successful_updates': collection.count_documents({'user_id': current_user.id, 'status': 'SUCCESS'}),
         'failed_updates': collection.count_documents({'user_id': current_user.id, 'status': 'FAILED'}),
         'pending_updates': collection.count_documents({'user_id': current_user.id, 'status': 'PENDING'}),
+        'pending_invites': Invitation.get_collection().count_documents({'invited_by_user_id': current_user.id, 'status': 'PENDING'}),
     }
     
     # Get recent bulk jobs
@@ -39,6 +43,7 @@ def index():
                          has_connection=has_connection,
                          connection=connection,
                          recent_logs=recent_logs,
+                         recent_invites=recent_invites,
                          stats=stats,
                          recent_jobs=recent_jobs)
 
@@ -62,3 +67,12 @@ def amazon_settings():
     return render_template('settings/amazon_connect.html',
                          connection=connection,
                          marketplaces=marketplaces)
+
+
+@bp.route('/team-access')
+@login_required
+def team_access():
+    """Invite-only access management page."""
+    invites = Invitation.get_recent_for_inviter(current_user.id, limit=50)
+    now = datetime.now(UTC)
+    return render_template('team_access.html', invites=invites, now=now)

@@ -2,17 +2,54 @@
 Authentication Routes for MongoDB
 """
 
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
-from flask_login import login_user, logout_user, login_required, current_user
-from werkzeug.security import generate_password_hash, check_password_hash
+import smtplib
+from datetime import datetime, timedelta, UTC
+from email.message import EmailMessage
 from urllib.parse import urlparse
-from datetime import datetime, timedelta
+
+from flask import Blueprint, current_app, flash, redirect, render_template, request, session, url_for
+from flask_login import login_user, logout_user, login_required, current_user
 
 from app import mongo
-from app.models import User, AmazonConnection
+from app.models import AmazonConnection, Invitation, User
 from app.services.auth_service import AmazonOAuth, TokenEncryption
 
 bp = Blueprint('auth', __name__)
+
+
+def _register_invite_context():
+    """Resolve invite token and invitation shown on the register page."""
+    invite_token = (request.values.get('invite') or request.args.get('invite') or '').strip()
+    invitation = Invitation.find_valid_by_token(invite_token) if invite_token else None
+    return invite_token, invitation
+
+
+def _send_invite_email(email, invite_url):
+    """Send invite email when SMTP configuration is available."""
+    smtp_host = current_app.config.get('SMTP_HOST')
+    smtp_port = int(current_app.config.get('SMTP_PORT', 587))
+    smtp_username = current_app.config.get('SMTP_USERNAME')
+    smtp_password = current_app.config.get('SMTP_PASSWORD')
+    mail_from = current_app.config.get('MAIL_FROM')
+
+    if not all([smtp_host, smtp_username, smtp_password, mail_from]):
+        return False
+
+    message = EmailMessage()
+    message['Subject'] = 'You have been invited to Amazon Listing Manager'
+    message['From'] = mail_from
+    message['To'] = email
+    message.set_content(
+        "You can now create your account for Amazon Listing Manager.\n\n"
+        f"Register using this secure invite link:\n{invite_url}\n\n"
+        "This link is valid for 7 days and only works for this email address."
+    )
+
+    with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as smtp:
+        smtp.starttls()
+        smtp.login(smtp_username, smtp_password)
+        smtp.send_message(message)
+    return True
 
 
 @bp.route('/register', methods=['GET', 'POST'])
@@ -21,11 +58,16 @@ def register():
     if current_user.is_authenticated:
         return redirect(url_for('dashboard.index'))
     
+    invite_token, invitation = _register_invite_context()
+    bootstrap_allowed = User.count_all() == 0
+
     if request.method == 'POST':
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password', '')
         confirm_password = request.form.get('confirm_password', '')
         name = request.form.get('name', '').strip()
+        invite_token = request.form.get('invite_token', invite_token).strip()
+        invitation = Invitation.find_valid_by_token(invite_token) if invite_token else None
         
         # Validation
         errors = []
@@ -42,25 +84,57 @@ def register():
         existing_user = User.find_by_email(email)
         if existing_user:
             errors.append('Email already registered')
+
+        if not bootstrap_allowed:
+            if not invitation:
+                errors.append('A valid invitation link is required to register')
+            elif invitation.email != email:
+                errors.append('This invitation only works for the invited email address')
         
         if errors:
             for error in errors:
                 flash(error, 'danger')
-            return render_template('auth/register.html', email=email, name=name)
+            return render_template(
+                'auth/register.html',
+                email=email,
+                name=name,
+                invitation=invitation,
+                invite_token=invite_token,
+                bootstrap_allowed=bootstrap_allowed,
+            )
         
         # Create user
         try:
-            user = User({'email': email, 'name': name})
+            user = User({
+                'email': email,
+                'name': name,
+                'invited_by_user_id': invitation.invited_by_user_id if invitation else None,
+            })
             user.set_password(password)
             user.save()
+
+            if invitation:
+                invitation.mark_accepted(user.id)
             
             flash('Registration successful! Please log in.', 'success')
             return redirect(url_for('auth.login'))
         except Exception as e:
             flash(f'Registration failed: {str(e)}', 'danger')
-            return render_template('auth/register.html', email=email, name=name)
+            return render_template(
+                'auth/register.html',
+                email=email,
+                name=name,
+                invitation=invitation,
+                invite_token=invite_token,
+                bootstrap_allowed=bootstrap_allowed,
+            )
     
-    return render_template('auth/register.html')
+    return render_template(
+        'auth/register.html',
+        invitation=invitation,
+        invite_token=invite_token,
+        bootstrap_allowed=bootstrap_allowed,
+    )
 
 
 @bp.route('/login', methods=['GET', 'POST'])
@@ -197,7 +271,7 @@ def amazon_callback():
             'marketplace_name': marketplace_name,
             'refresh_token_encrypted': encryption.encrypt(token_data['refresh_token']),
             'access_token_encrypted': encryption.encrypt(token_data.get('access_token')),
-            'token_expires_at': datetime.utcnow() + timedelta(seconds=expires_in) if expires_in else None,
+            'token_expires_at': datetime.now(UTC) + timedelta(seconds=expires_in) if expires_in else None,
             'is_active': True
         })
         connection.save()
@@ -291,7 +365,7 @@ def update_seller_id():
     collection = AmazonConnection.get_collection()
     result = collection.find_one_and_update(
         {'user_id': current_user.id, 'is_active': True},
-        {'$set': {'seller_id': seller_id, 'updated_at': datetime.utcnow()}}
+        {'$set': {'seller_id': seller_id, 'updated_at': datetime.now(UTC)}}
     )
     
     if result:
@@ -300,3 +374,40 @@ def update_seller_id():
         flash('No active Amazon connection found', 'danger')
     
     return redirect(url_for('dashboard.amazon_settings'))
+
+
+@bp.route('/invites', methods=['POST'])
+@login_required
+def create_invite():
+    """Create an email invitation that gates account registration."""
+    email = request.form.get('email', '').strip().lower()
+    if not email:
+        flash('Invite email is required', 'danger')
+        return redirect(url_for('dashboard.team_access'))
+
+    existing_user = User.find_by_email(email)
+    if existing_user:
+        flash('That email already has an account', 'warning')
+        return redirect(url_for('dashboard.team_access'))
+
+    invite = Invitation({
+        'email': email,
+        'invited_by_user_id': current_user.id,
+    }).save()
+    invite_url = url_for('auth.register', invite=invite.token, _external=True)
+
+    try:
+        sent = _send_invite_email(email, invite_url)
+    except Exception as exc:
+        current_app.logger.exception("Failed to send invite email")
+        flash(f'Invite created, but email sending failed: {exc}', 'warning')
+        flash(f'Share this invite link manually: {invite_url}', 'info')
+        return redirect(url_for('dashboard.team_access'))
+
+    if sent:
+        flash(f'Invite sent to {email}', 'success')
+    else:
+        flash(f'Invite created for {email}. Configure SMTP to send automatically.', 'warning')
+        flash(f'Share this invite link manually: {invite_url}', 'info')
+
+    return redirect(url_for('dashboard.team_access'))

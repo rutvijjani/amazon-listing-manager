@@ -40,6 +40,11 @@ def create_app(config_name=None):
         'SANDBOX_REFRESH_TOKEN',
         'SANDBOX_SELLER_ID',
         'SANDBOX_MARKETPLACE_ID',
+        'SMTP_HOST',
+        'SMTP_PORT',
+        'SMTP_USERNAME',
+        'SMTP_PASSWORD',
+        'MAIL_FROM',
     ]
     for key in config_keys:
         value = os.getenv(key)
@@ -96,6 +101,9 @@ def create_app(config_name=None):
             mongo.db.amazon_connections.create_index('user_id')
             mongo.db.update_logs.create_index('user_id')
             mongo.db.bulk_update_jobs.create_index('user_id')
+            mongo.db.invitations.create_index('email')
+            mongo.db.invitations.create_index('token', unique=True)
+            mongo.db.invitations.create_index('invited_by_user_id')
             print("MongoDB indexes created")
         except Exception as e:
             print(f"Index creation warning: {e}")

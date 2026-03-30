@@ -5,10 +5,8 @@ Handles authentication, request signing, and API calls
 
 import requests
 import json
-import hashlib
-import hmac
-from datetime import datetime, timedelta
-from urllib.parse import urlparse, quote
+from datetime import UTC, datetime, timedelta
+from urllib.parse import urlparse
 import boto3
 from botocore.auth import SigV4Auth
 from botocore.awsrequest import AWSRequest
@@ -74,7 +72,7 @@ class SPAPIClient:
         
         # Check if we have a valid cached token
         if self.connection.access_token_encrypted and self.connection.token_expires_at:
-            if self.connection.token_expires_at > datetime.utcnow() + timedelta(minutes=5):
+            if self.connection.token_expires_at > datetime.now(UTC) + timedelta(minutes=5):
                 # Token is still valid (with 5 min buffer)
                 return self.encryption.decrypt(self.connection.access_token_encrypted)
         
@@ -88,7 +86,7 @@ class SPAPIClient:
             # Update connection with new tokens
             self.connection.access_token_encrypted = self.encryption.encrypt(token_data['access_token'])
             self.connection.token_expires_at = token_data['expires_at']
-            self.connection.updated_at = datetime.utcnow()
+            self.connection.updated_at = datetime.now(UTC)
             AmazonConnection.get_collection().update_one(
                 {'_id': self.connection._id},
                 {'$set': {
@@ -269,6 +267,35 @@ class SPAPIClient:
         }
         
         return self._make_request('GET', f'/catalog/2022-04-01/items/{asin}', params=params)
+
+    # ==================== Product Type Definitions API ====================
+
+    def get_product_type_definition(self, product_type, requirements='LISTING', requirements_enforced='ENFORCED'):
+        """Get product type definition metadata for the current marketplace."""
+        params = {
+            'marketplaceIds': self.connection.marketplace_id,
+            'requirements': requirements,
+            'requirementsEnforced': requirements_enforced,
+            'locale': self._get_locale_for_marketplace(),
+            'sellerId': self.connection.seller_id,
+        }
+        return self._make_request(
+            'GET',
+            f'/definitions/2020-09-01/productTypes/{product_type}',
+            params=params
+        )
+
+    def get_product_type_schema(self, definition):
+        """Fetch the linked schema document when the product definition exposes one."""
+        schema_link = ((definition or {}).get('schema') or {}).get('link') or {}
+        schema_url = schema_link.get('resource')
+        if not schema_url:
+            return {}
+
+        response = requests.get(schema_url, timeout=60)
+        if response.status_code != 200:
+            raise Exception(f"Failed to load product type schema: {response.text}")
+        return response.json()
     
     # ==================== Listings Items API ====================
     
@@ -381,7 +408,7 @@ class SPAPIClient:
     # ==================== Helper Methods ====================
     
     def update_price(self, seller_id, sku, price, currency='INR', sale_price=None, 
-                     sale_start=None, sale_end=None):
+                     sale_start=None, sale_end=None, product_type='PRODUCT'):
         """
         Update product price
         
@@ -420,13 +447,13 @@ class SPAPIClient:
                 'op': 'replace',
                 'path': '/attributes/sale',
                 'value': [{
-                    'start_at': sale_start or datetime.utcnow().isoformat(),
-                    'end_at': sale_end or (datetime.utcnow() + timedelta(days=7)).isoformat(),
+                    'start_at': sale_start or datetime.now(UTC).isoformat(),
+                    'end_at': sale_end or (datetime.now(UTC) + timedelta(days=7)).isoformat(),
                     'sale_price': [sale_offer]
                 }]
             })
-        
-        return self.patch_listings_item(seller_id, sku, patches)
+
+        return self.patch_listings_item(seller_id, sku, patches, product_type=product_type)
     
     def update_inventory(self, seller_id, sku, quantity, fulfillment_channel='DEFAULT'):
         """
@@ -448,4 +475,14 @@ class SPAPIClient:
         }]
         
         return self.patch_listings_item(seller_id, sku, patches)
+
+    def _get_locale_for_marketplace(self):
+        locale_map = {
+            'A21TJRUUN4KGV': 'en_IN',
+            'ATVPDKIKX0DER': 'en_US',
+            'A2EUQ1WTGCTBG2': 'en_CA',
+            'A1F83G8C2ARO7P': 'en_GB',
+            'A1PA6795UKMFR9': 'de_DE',
+        }
+        return locale_map.get(self.connection.marketplace_id, 'en_US')
 

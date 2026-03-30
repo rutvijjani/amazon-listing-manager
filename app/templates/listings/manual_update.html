@@ -213,7 +213,7 @@
                 <i class="bi bi-braces"></i> Advanced Attribute Editor
             </div>
             <div class="card-body">
-                {% if product_attributes %}
+                {% if attribute_editors %}
                 <form method="POST" action="{{ url_for('listings.manual_update') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="attributes">
@@ -225,16 +225,63 @@
                     </div>
 
                     <div class="alert alert-info">
-                        Select only the product attributes you want to update. Each value must stay in Amazon's JSON attribute format.
+                        Select only the product attributes you want to update. Common attributes are shown as friendly fields; unsupported shapes fall back to raw JSON.
                     </div>
 
-                    {% for attribute_name, attribute_value in product_attributes|dictsort %}
+                    {% for attribute in attribute_editors %}
                     <div class="border rounded p-3 mb-3">
                         <div class="form-check mb-2">
-                            <input class="form-check-input advanced-attribute-toggle" type="checkbox" name="attribute_keys" value="{{ attribute_name }}" id="attr-{{ loop.index }}">
-                            <label class="form-check-label fw-semibold" for="attr-{{ loop.index }}">{{ attribute_name }}</label>
+                            <input class="form-check-input advanced-attribute-toggle" type="checkbox" name="attribute_keys" value="{{ attribute.name }}" id="attr-{{ loop.index }}">
+                            <label class="form-check-label fw-semibold" for="attr-{{ loop.index }}">{{ attribute.label }}</label>
                         </div>
-                        <textarea class="form-control advanced-attribute-input d-none" rows="6" name="attr_json__{{ attribute_name }}">{{ attribute_value|tojson(indent=2) }}</textarea>
+                        <input type="hidden" name="attribute_mode__{{ attribute.name }}" value="{{ attribute.mode }}">
+                        <input type="hidden" name="attribute_original__{{ attribute.name }}" value="{{ product_attributes[attribute.name]|tojson }}">
+                        <div class="advanced-attribute-input d-none">
+                            {% if attribute.mode == 'text' %}
+                            <input type="text" class="form-control" name="attr_value__{{ attribute.name }}" value="{{ attribute.value }}">
+                            {% elif attribute.mode == 'number' %}
+                            <input type="number" step="0.01" class="form-control" name="attr_value__{{ attribute.name }}" value="{{ attribute.value }}">
+                            {% elif attribute.mode == 'boolean' %}
+                            <select class="form-select" name="attr_value__{{ attribute.name }}">
+                                <option value="true" {% if attribute.value %}selected{% endif %}>True</option>
+                                <option value="false" {% if not attribute.value %}selected{% endif %}>False</option>
+                            </select>
+                            {% elif attribute.mode == 'list_text' %}
+                            <textarea class="form-control" rows="5" name="attr_value__{{ attribute.name }}">{{ attribute.value }}</textarea>
+                            <div class="form-text">One value per line</div>
+                            {% elif attribute.mode == 'measurement' %}
+                            <div class="row g-2">
+                                <div class="col-md-8">
+                                    <input type="number" step="0.01" class="form-control" name="attr_value__{{ attribute.name }}" value="{{ attribute.value }}">
+                                </div>
+                                <div class="col-md-4">
+                                    <input type="text" class="form-control" name="attr_unit__{{ attribute.name }}" value="{{ attribute.unit }}" placeholder="unit">
+                                </div>
+                            </div>
+                            {% elif attribute.mode == 'dimensions' %}
+                            <div class="row g-2">
+                                <div class="col-md-3">
+                                    <label class="form-label small">Length</label>
+                                    <input type="number" step="0.01" class="form-control" name="attr_length__{{ attribute.name }}" value="{{ attribute.dimensions.length }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small">Width</label>
+                                    <input type="number" step="0.01" class="form-control" name="attr_width__{{ attribute.name }}" value="{{ attribute.dimensions.width }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small">Height</label>
+                                    <input type="number" step="0.01" class="form-control" name="attr_height__{{ attribute.name }}" value="{{ attribute.dimensions.height }}">
+                                </div>
+                                <div class="col-md-3">
+                                    <label class="form-label small">Unit</label>
+                                    <input type="text" class="form-control" name="attr_unit__{{ attribute.name }}" value="{{ attribute.unit }}" placeholder="cm">
+                                </div>
+                            </div>
+                            {% else %}
+                            <textarea class="form-control" rows="6" name="attr_json__{{ attribute.name }}">{{ attribute.json_value }}</textarea>
+                            <div class="form-text">Advanced JSON mode</div>
+                            {% endif %}
+                        </div>
                     </div>
                     {% endfor %}
 

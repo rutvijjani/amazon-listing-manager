@@ -43,6 +43,66 @@ def _build_attribute_payload(form):
     payload = {}
 
     for attribute_key in form.getlist('attribute_keys'):
+        mode = form.get(f'attribute_mode__{attribute_key}', 'raw_json')
+        original_raw = form.get(f'attribute_original__{attribute_key}', 'null')
+        original_value = json.loads(original_raw)
+
+        if mode == 'text':
+            entry = (original_value or [{}])[0].copy() if isinstance(original_value, list) else {}
+            entry['value'] = (form.get(f'attr_value__{attribute_key}') or '').strip()
+            payload[attribute_key] = [entry]
+            continue
+
+        if mode == 'number':
+            entry = (original_value or [{}])[0].copy() if isinstance(original_value, list) else {}
+            raw_value = (form.get(f'attr_value__{attribute_key}') or '').strip()
+            if raw_value == '':
+                raise Exception(f'Provide a value for attribute "{attribute_key}"')
+            entry['value'] = float(raw_value)
+            payload[attribute_key] = [entry]
+            continue
+
+        if mode == 'boolean':
+            entry = (original_value or [{}])[0].copy() if isinstance(original_value, list) else {}
+            raw_value = (form.get(f'attr_value__{attribute_key}') or '').strip().lower()
+            entry['value'] = raw_value == 'true'
+            payload[attribute_key] = [entry]
+            continue
+
+        if mode == 'list_text':
+            template = (original_value or [{}])[0].copy() if isinstance(original_value, list) else {}
+            template.pop('value', None)
+            lines = [line.strip() for line in (form.get(f'attr_value__{attribute_key}') or '').splitlines() if line.strip()]
+            if not lines:
+                raise Exception(f'Provide at least one value for attribute "{attribute_key}"')
+            payload[attribute_key] = [{**template, 'value': line} for line in lines]
+            continue
+
+        if mode == 'measurement':
+            entry = (original_value or [{}])[0].copy() if isinstance(original_value, list) else {}
+            raw_value = (form.get(f'attr_value__{attribute_key}') or '').strip()
+            if raw_value == '':
+                raise Exception(f'Provide a value for attribute "{attribute_key}"')
+            entry['value'] = float(raw_value)
+            entry['unit'] = (form.get(f'attr_unit__{attribute_key}') or entry.get('unit') or '').strip()
+            payload[attribute_key] = [entry]
+            continue
+
+        if mode == 'dimensions':
+            entry = (original_value or [{}])[0].copy() if isinstance(original_value, list) else {}
+            for dim_key in ('length', 'width', 'height'):
+                dim_raw = (form.get(f'attr_{dim_key}__{attribute_key}') or '').strip()
+                if dim_raw == '':
+                    raise Exception(f'Provide {dim_key} for attribute "{attribute_key}"')
+                unit = (form.get(f'attr_unit__{attribute_key}') or '').strip()
+                dim_entry = entry.get(dim_key, {}).copy()
+                dim_entry['value'] = float(dim_raw)
+                if unit:
+                    dim_entry['unit'] = unit
+                entry[dim_key] = dim_entry
+            payload[attribute_key] = [entry]
+            continue
+
         textarea_name = f'attr_json__{attribute_key}'
         raw_value = (form.get(textarea_name) or '').strip()
         if not raw_value:
@@ -56,6 +116,70 @@ def _build_attribute_payload(form):
     return payload
 
 
+def _classify_attribute_editor(attribute_name, attribute_value):
+    """Return template metadata for a user-friendly attribute editor."""
+    editor = {
+        'name': attribute_name,
+        'label': attribute_name.replace('_', ' ').replace('-', ' ').title(),
+        'mode': 'raw_json',
+        'json_value': json.dumps(attribute_value, indent=2),
+    }
+
+    if not isinstance(attribute_value, list) or not attribute_value:
+        return editor
+
+    if not all(isinstance(item, dict) for item in attribute_value):
+        return editor
+
+    first = attribute_value[0]
+
+    if all('value' in item and isinstance(item.get('value'), (str, int, float, bool)) for item in attribute_value):
+        if len(attribute_value) == 1:
+            value = first.get('value')
+            if isinstance(value, bool):
+                editor.update({'mode': 'boolean', 'value': value})
+            elif isinstance(value, (int, float)):
+                editor.update({'mode': 'number', 'value': value})
+            else:
+                editor.update({'mode': 'text', 'value': value or ''})
+        else:
+            editor.update({
+                'mode': 'list_text',
+                'value': '\n'.join(str(item.get('value', '')) for item in attribute_value if item.get('value') is not None),
+            })
+        return editor
+
+    if len(attribute_value) == 1 and {'value', 'unit'}.issubset(first.keys()) and isinstance(first.get('value'), (int, float)):
+        editor.update({
+            'mode': 'measurement',
+            'value': first.get('value', ''),
+            'unit': first.get('unit', ''),
+        })
+        return editor
+
+    if len(attribute_value) == 1 and all(key in first for key in ('length', 'width', 'height')):
+        dimensions = {}
+        for dim_key in ('length', 'width', 'height'):
+            dim_entry = first.get(dim_key) or {}
+            if not isinstance(dim_entry, dict):
+                return editor
+            dimensions[dim_key] = dim_entry.get('value', '')
+        unit = ''
+        for dim_key in ('length', 'width', 'height'):
+            dim_entry = first.get(dim_key) or {}
+            if dim_entry.get('unit'):
+                unit = dim_entry.get('unit')
+                break
+        editor.update({
+            'mode': 'dimensions',
+            'dimensions': dimensions,
+            'unit': unit,
+        })
+        return editor
+
+    return editor
+
+
 def _resolve_product_attributes(listing, catalog_item):
     """Resolve loaded product attributes for the advanced attribute editor."""
     if listing and listing.get('attributes'):
@@ -63,6 +187,14 @@ def _resolve_product_attributes(listing, catalog_item):
     if catalog_item and catalog_item.get('attributes'):
         return catalog_item.get('attributes') or {}
     return {}
+
+
+def _build_attribute_editors(listing, catalog_item):
+    attributes = _resolve_product_attributes(listing, catalog_item)
+    return [
+        _classify_attribute_editor(attribute_name, attribute_value)
+        for attribute_name, attribute_value in sorted(attributes.items())
+    ]
 
 
 @bp.route('/')
@@ -227,6 +359,7 @@ def manual_update():
                 listing=listing,
                 catalog_item=catalog_item,
                 product_attributes=_resolve_product_attributes(listing, catalog_item),
+                attribute_editors=_build_attribute_editors(listing, catalog_item),
                 sku=sku,
                 asin=asin,
             )
@@ -272,6 +405,7 @@ def manual_update():
         listing=listing,
         catalog_item=catalog_item,
         product_attributes=_resolve_product_attributes(listing, catalog_item),
+        attribute_editors=_build_attribute_editors(listing, catalog_item),
         sku=sku,
         asin=asin,
     )

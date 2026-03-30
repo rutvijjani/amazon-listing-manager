@@ -305,6 +305,53 @@ class Invitation:
         return self
 
     @classmethod
+    def find_by_user(cls, user_id, marketplace_id=None, active_only=True):
+        """Find one connection for a user, optionally filtered by marketplace."""
+        query = {'user_id': user_id}
+        if active_only:
+            query['is_active'] = True
+        if marketplace_id:
+            query['marketplace_id'] = marketplace_id
+        data = cls.get_collection().find_one(query)
+        return cls(data) if data else None
+
+    @classmethod
+    def deactivate_selected_for_user(cls, user_id):
+        """Clear active selection marker for all of the user's live connections."""
+        cls.get_collection().update_many(
+            {'user_id': user_id, 'is_active': True, 'is_selected': True},
+            {'$set': {'is_selected': False, 'updated_at': datetime.now(UTC)}}
+        )
+
+    @classmethod
+    def upsert_for_marketplace(cls, user_id, marketplace_id, defaults):
+        """Create or update a marketplace connection for a user."""
+        collection = cls.get_collection()
+        existing = collection.find_one({
+            'user_id': user_id,
+            'marketplace_id': marketplace_id
+        })
+
+        payload = {
+            **defaults,
+            'user_id': user_id,
+            'marketplace_id': marketplace_id,
+            'updated_at': datetime.now(UTC),
+        }
+
+        if existing:
+            collection.update_one({'_id': existing['_id']}, {'$set': payload})
+            payload['_id'] = existing['_id']
+            if 'created_at' not in payload:
+                payload['created_at'] = existing.get('created_at', datetime.now(UTC))
+            return cls(payload)
+
+        payload.setdefault('created_at', datetime.now(UTC))
+        result = collection.insert_one(payload)
+        payload['_id'] = result.inserted_id
+        return cls(payload)
+
+    @classmethod
     def deactivate_selected_for_user(cls, user_id):
         cls.get_collection().update_many(
             {'user_id': user_id, 'is_selected': True},

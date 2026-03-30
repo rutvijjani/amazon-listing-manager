@@ -17,6 +17,37 @@ from app.services.auth_service import AmazonOAuth, TokenEncryption
 bp = Blueprint('auth', __name__)
 
 
+def _clear_selected_marketplaces(user_id):
+    """Clear the selected flag without relying on model helper availability."""
+    AmazonConnection.get_collection().update_many(
+        {'user_id': user_id, 'is_active': True, 'is_selected': True},
+        {'$set': {'is_selected': False, 'updated_at': datetime.now(UTC)}}
+    )
+
+
+def _upsert_marketplace_connection(user_id, marketplace_id, defaults):
+    """Upsert a marketplace connection directly through the collection."""
+    collection = AmazonConnection.get_collection()
+    existing = collection.find_one({
+        'user_id': user_id,
+        'marketplace_id': marketplace_id
+    })
+
+    payload = {
+        **defaults,
+        'user_id': user_id,
+        'marketplace_id': marketplace_id,
+        'updated_at': datetime.now(UTC),
+    }
+
+    if existing:
+        collection.update_one({'_id': existing['_id']}, {'$set': payload})
+        return
+
+    payload.setdefault('created_at', datetime.now(UTC))
+    collection.insert_one(payload)
+
+
 def _register_invite_context():
     """Resolve invite token and invitation shown on the register page."""
     invite_token = (request.values.get('invite') or request.args.get('invite') or '').strip()
@@ -256,8 +287,8 @@ def amazon_callback():
         expires_in = token_data.get('expires_in')
         selling_partner_id = request.args.get('selling_partner_id') or session.get('oauth_selling_partner_id')
         
-        AmazonConnection.deactivate_selected_for_user(current_user.id)
-        AmazonConnection.upsert_for_marketplace(current_user.id, marketplace_id, {
+        _clear_selected_marketplaces(current_user.id)
+        _upsert_marketplace_connection(current_user.id, marketplace_id, {
             'seller_id': selling_partner_id or 'pending',
             'marketplace_name': marketplace_name,
             'refresh_token_encrypted': encryption.encrypt(token_data['refresh_token']),
@@ -278,6 +309,7 @@ def amazon_callback():
         return redirect(url_for('dashboard.amazon_settings'))
         
     except Exception as e:
+        current_app.logger.exception('Amazon OAuth marketplace connect failed')
         flash(f'Failed to connect Amazon account: {str(e)}', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))
 
@@ -331,8 +363,8 @@ def amazon_direct_connect():
 
     try:
         encryption = TokenEncryption()
-        AmazonConnection.deactivate_selected_for_user(current_user.id)
-        AmazonConnection.upsert_for_marketplace(current_user.id, marketplace_id, {
+        _clear_selected_marketplaces(current_user.id)
+        _upsert_marketplace_connection(current_user.id, marketplace_id, {
             'seller_id': seller_id,
             'marketplace_name': AmazonOAuth.get_marketplace_name(marketplace_id),
             'refresh_token_encrypted': encryption.encrypt(refresh_token),
@@ -344,6 +376,7 @@ def amazon_direct_connect():
 
         flash(f'Amazon account connected successfully for {AmazonOAuth.get_marketplace_name(marketplace_id)}.', 'success')
     except Exception as e:
+        current_app.logger.exception('Amazon direct marketplace connect failed')
         flash(f'Failed to connect Amazon account: {str(e)}', 'danger')
 
     return redirect(url_for('dashboard.amazon_settings'))
@@ -394,7 +427,7 @@ def select_marketplace():
         flash('Marketplace connection not found', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))
 
-    AmazonConnection.deactivate_selected_for_user(current_user.id)
+    _clear_selected_marketplaces(current_user.id)
     AmazonConnection.get_collection().update_one(
         {'_id': connection._id},
         {'$set': {'is_selected': True, 'updated_at': datetime.now(UTC)}}

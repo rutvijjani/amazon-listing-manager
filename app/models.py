@@ -93,20 +93,39 @@ class User(UserMixin):
         return self
     
     def has_amazon_connection(self):
-        """Check if user has connected Amazon account"""
+        """Check if user has any connected Amazon account."""
         collection = AmazonConnection.get_collection()
         return collection.count_documents({
             'user_id': self.id,
             'is_active': True
         }) > 0
-    
-    def get_active_connection(self):
-        """Get user's active Amazon connection"""
+
+    def get_amazon_connections(self):
+        """Return all active Amazon connections for the user."""
         collection = AmazonConnection.get_collection()
-        conn_data = collection.find_one({
+        return [
+            AmazonConnection(data)
+            for data in collection.find({
+                'user_id': self.id,
+                'is_active': True
+            }).sort('marketplace_name', 1)
+        ]
+
+    def get_active_connection(self, marketplace_id=None):
+        """Get the selected connection, or one for a specific marketplace."""
+        collection = AmazonConnection.get_collection()
+        query = {
             'user_id': self.id,
             'is_active': True
-        })
+        }
+        if marketplace_id:
+            query['marketplace_id'] = marketplace_id
+            conn_data = collection.find_one(query)
+            return AmazonConnection(conn_data) if conn_data else None
+
+        conn_data = collection.find_one({**query, 'is_selected': True})
+        if not conn_data:
+            conn_data = collection.find_one(query)
         return AmazonConnection(conn_data) if conn_data else None
     
     # Flask-Login required properties
@@ -144,6 +163,7 @@ class AmazonConnection:
         self.access_token_encrypted = data.get('access_token_encrypted')
         self.token_expires_at = data.get('token_expires_at')
         self.is_active = data.get('is_active', True)
+        self.is_selected = data.get('is_selected', False)
         self.created_at = data.get('created_at', datetime.now(UTC))
         self.updated_at = data.get('updated_at', datetime.now(UTC))
     
@@ -164,6 +184,7 @@ class AmazonConnection:
             'access_token_encrypted': self.access_token_encrypted,
             'token_expires_at': self.token_expires_at,
             'is_active': self.is_active,
+            'is_selected': self.is_selected,
             'created_at': self.created_at if isinstance(self.created_at, datetime) else datetime.now(UTC),
             'updated_at': datetime.now(UTC)
         }
@@ -282,6 +303,37 @@ class Invitation:
             result = collection.insert_one(data)
             self._id = result.inserted_id
         return self
+
+    @classmethod
+    def deactivate_selected_for_user(cls, user_id):
+        cls.get_collection().update_many(
+            {'user_id': user_id, 'is_selected': True},
+            {'$set': {'is_selected': False, 'updated_at': datetime.now(UTC)}}
+        )
+
+    @classmethod
+    def upsert_for_marketplace(cls, user_id, marketplace_id, defaults):
+        collection = cls.get_collection()
+        existing = collection.find_one({
+            'user_id': user_id,
+            'marketplace_id': marketplace_id,
+        })
+        if existing:
+            collection.update_one(
+                {'_id': existing['_id']},
+                {'$set': {**defaults, 'updated_at': datetime.now(UTC)}}
+            )
+            existing.update(defaults)
+            existing['updated_at'] = datetime.now(UTC)
+            return cls(existing)
+
+        connection = cls({
+            'user_id': user_id,
+            'marketplace_id': marketplace_id,
+            **defaults,
+        })
+        connection.save()
+        return connection
 
     @classmethod
     def find_valid_by_token(cls, token):

@@ -3,9 +3,8 @@ Sandbox Auto-Connect Routes for MongoDB
 For direct sandbox credentials without OAuth flow
 """
 
-from flask import Blueprint, redirect, url_for, flash, current_app
+from flask import Blueprint, current_app, flash, redirect, url_for
 from flask_login import login_required, current_user
-from datetime import datetime
 
 from app.models import AmazonConnection
 from app.services.auth_service import TokenEncryption
@@ -36,25 +35,15 @@ def auto_connect():
     
     try:
         encryption = TokenEncryption()
-        
-        # Deactivate existing connections
-        collection = AmazonConnection.get_collection()
-        collection.update_many(
-            {'user_id': current_user.id, 'is_active': True},
-            {'$set': {'is_active': False}}
-        )
-        
-        # Create new sandbox connection
-        connection = AmazonConnection({
-            'user_id': current_user.id,
+        AmazonConnection.deactivate_selected_for_user(current_user.id)
+        AmazonConnection.upsert_for_marketplace(current_user.id, marketplace_id, {
             'seller_id': seller_id,
-            'marketplace_id': marketplace_id,
             'marketplace_name': 'Amazon.in (Sandbox)',
             'refresh_token_encrypted': encryption.encrypt(refresh_token),
             'access_token_encrypted': None,
-            'is_active': True
+            'is_active': True,
+            'is_selected': True,
         })
-        connection.save()
         
         flash(f'Successfully connected to Amazon Sandbox! Seller ID: {seller_id}', 'success')
         return redirect(url_for('dashboard.index'))

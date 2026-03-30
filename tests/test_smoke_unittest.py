@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import app as app_module
-from app.models import Invitation
+from app.models import AmazonConnection, Invitation
 from app.services.listing_service import ListingService
 from tests.smoke_support import attach_connection, build_test_app, login_test_user
 
@@ -63,6 +63,26 @@ class SmokeTests(unittest.TestCase):
         response = self.client.get("/settings/amazon")
         self.assertEqual(response.status_code, 200)
         self.assertIn(b"Amazon Settings", response.data)
+
+    def test_multiple_marketplaces_render_and_selected_connection_is_used(self):
+        login_test_user(self.client)
+        attach_connection()
+        fake_db = app_module.mongo.db
+        user = fake_db.users.docs[0]
+        app_module.mongo.db.amazon_connections.insert_one({
+            "user_id": str(user["_id"]),
+            "seller_id": "SELLER-US",
+            "marketplace_id": "ATVPDKIKX0DER",
+            "marketplace_name": "United States",
+            "refresh_token_encrypted": "encrypted-token-us",
+            "is_active": True,
+            "is_selected": False,
+        })
+        response = self.client.get("/settings/amazon")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(b"Connected Marketplaces", response.data)
+        self.assertIn(b"United States", response.data)
+        self.assertIn(b"India", response.data)
 
     def test_manual_update_page_renders_for_connected_user(self):
         login_test_user(self.client)

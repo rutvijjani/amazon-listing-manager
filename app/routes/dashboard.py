@@ -18,6 +18,7 @@ def index():
     # Check if user has Amazon connection
     has_connection = current_user.has_amazon_connection()
     connection = current_user.get_active_connection()
+    connections = current_user.get_amazon_connections()
     
     # Get recent activity (always scoped to the current user)
     recent_logs = UpdateLog.get_recent_by_user(current_user.id, limit=10)
@@ -42,6 +43,7 @@ def index():
     return render_template('dashboard.html',
                          has_connection=has_connection,
                          connection=connection,
+                         connections=connections,
                          recent_logs=recent_logs,
                          recent_invites=recent_invites,
                          stats=stats,
@@ -60,12 +62,14 @@ def settings():
 def amazon_settings():
     """Amazon connection settings"""
     connection = current_user.get_active_connection()
+    connections = current_user.get_amazon_connections()
     
     from app.services.auth_service import AmazonOAuth
     marketplaces = AmazonOAuth.MARKETPLACES
     
     return render_template('settings/amazon_connect.html',
                          connection=connection,
+                         connections=connections,
                          marketplaces=marketplaces)
 
 

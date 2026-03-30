@@ -72,7 +72,8 @@ class SPAPIClient:
         
         # Check if we have a valid cached token
         if self.connection.access_token_encrypted and self.connection.token_expires_at:
-            if self.connection.token_expires_at > datetime.now(UTC) + timedelta(minutes=5):
+            token_expires_at = self._normalize_datetime(self.connection.token_expires_at)
+            if token_expires_at > datetime.now(UTC) + timedelta(minutes=5):
                 # Token is still valid (with 5 min buffer)
                 return self.encryption.decrypt(self.connection.access_token_encrypted)
         
@@ -85,7 +86,7 @@ class SPAPIClient:
             
             # Update connection with new tokens
             self.connection.access_token_encrypted = self.encryption.encrypt(token_data['access_token'])
-            self.connection.token_expires_at = token_data['expires_at']
+            self.connection.token_expires_at = self._normalize_datetime(token_data['expires_at'])
             self.connection.updated_at = datetime.now(UTC)
             AmazonConnection.get_collection().update_one(
                 {'_id': self.connection._id},
@@ -485,4 +486,13 @@ class SPAPIClient:
             'A1PA6795UKMFR9': 'de_DE',
         }
         return locale_map.get(self.connection.marketplace_id, 'en_US')
+
+    @staticmethod
+    def _normalize_datetime(value):
+        """Normalize Mongo datetimes so old naive values still compare safely."""
+        if not value:
+            return value
+        if value.tzinfo is None:
+            return value.replace(tzinfo=UTC)
+        return value.astimezone(UTC)
 

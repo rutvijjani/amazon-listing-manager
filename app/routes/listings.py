@@ -6,6 +6,7 @@ from flask import Blueprint, render_template, request, flash, redirect, url_for,
 from flask_login import login_required, current_user
 import csv
 import io
+import json
 from datetime import datetime
 from bson.errors import InvalidId
 from bson.objectid import ObjectId
@@ -35,6 +36,33 @@ def _build_content_payload(form, selected_fields):
         ]
 
     return data
+
+
+def _build_attribute_payload(form):
+    """Build generic attribute payload for selected top-level Amazon attributes."""
+    payload = {}
+
+    for attribute_key in form.getlist('attribute_keys'):
+        textarea_name = f'attr_json__{attribute_key}'
+        raw_value = (form.get(textarea_name) or '').strip()
+        if not raw_value:
+            raise Exception(f'Provide a JSON value for attribute "{attribute_key}"')
+
+        try:
+            payload[attribute_key] = json.loads(raw_value)
+        except json.JSONDecodeError as exc:
+            raise Exception(f'Invalid JSON for attribute "{attribute_key}": {exc.msg}') from exc
+
+    return payload
+
+
+def _resolve_product_attributes(listing, catalog_item):
+    """Resolve loaded product attributes for the advanced attribute editor."""
+    if listing and listing.get('attributes'):
+        return listing.get('attributes') or {}
+    if catalog_item and catalog_item.get('attributes'):
+        return catalog_item.get('attributes') or {}
+    return {}
 
 
 @bp.route('/')
@@ -171,6 +199,7 @@ def manual_update():
     sku = request.values.get('sku', '').strip()
     listing = {}
     catalog_item = None
+    product_attributes = {}
 
     if sku:
         try:
@@ -197,6 +226,7 @@ def manual_update():
                 'listings/manual_update.html',
                 listing=listing,
                 catalog_item=catalog_item,
+                product_attributes=_resolve_product_attributes(listing, catalog_item),
                 sku=sku,
                 asin=asin,
             )
@@ -224,6 +254,14 @@ def manual_update():
                 service.update_content(sku, data)
                 flash('Selected content attributes updated successfully!', 'success')
 
+            elif update_type == 'attributes':
+                attribute_keys = request.form.getlist('attribute_keys')
+                if not attribute_keys:
+                    raise Exception('Select at least one product attribute to update')
+                data = _build_attribute_payload(request.form)
+                service.update_attributes(sku, data)
+                flash('Selected product attributes updated successfully!', 'success')
+
             return redirect(url_for('listings.manual_update', sku=sku, asin=asin))
         except Exception as e:
             current_app.logger.exception("Manual listing update failed")
@@ -233,6 +271,7 @@ def manual_update():
         'listings/manual_update.html',
         listing=listing,
         catalog_item=catalog_item,
+        product_attributes=_resolve_product_attributes(listing, catalog_item),
         sku=sku,
         asin=asin,
     )
@@ -334,6 +373,18 @@ def bulk_update():
                         if 'search_terms' in content_fields:
                             data['search_terms'] = [term.strip() for term in (row.get('search_terms') or '').split('|') if term.strip()]
                         service.update_content(sku, data)
+
+                    elif operation_type == 'attributes':
+                        attributes_json = (row.get('attributes_json') or '').strip()
+                        if not attributes_json:
+                            raise Exception('attributes_json is required for attributes updates')
+                        try:
+                            data = json.loads(attributes_json)
+                        except json.JSONDecodeError as exc:
+                            raise Exception(f'Invalid attributes_json: {exc.msg}') from exc
+                        if not isinstance(data, dict):
+                            raise Exception('attributes_json must be a JSON object')
+                        service.update_attributes(sku, data)
                     
                     success_count += 1
                     
@@ -436,6 +487,11 @@ def download_template(operation_type):
         headers = ['sku', 'title', 'description', 'bullet_points']
         sample = [
             {'sku': 'SKU001', 'title': 'Product Title', 'description': 'Product description', 'bullet_points': 'Point 1|Point 2|Point 3'},
+        ]
+    elif operation_type == 'attributes':
+        headers = ['sku', 'attributes_json']
+        sample = [
+            {'sku': 'SKU001', 'attributes_json': '{"item_name":[{"value":"Updated title","marketplace_id":"A21TJRUUN4KGV"}]}'},
         ]
     else:
         flash('Invalid template type', 'danger')

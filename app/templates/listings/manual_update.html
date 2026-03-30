@@ -207,6 +207,44 @@
                 </form>
             </div>
         </div>
+
+        <div class="card mt-4">
+            <div class="card-header">
+                <i class="bi bi-braces"></i> Advanced Attribute Editor
+            </div>
+            <div class="card-body">
+                {% if product_attributes %}
+                <form method="POST" action="{{ url_for('listings.manual_update') }}">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <input type="hidden" name="update_type" value="attributes">
+                    <input type="hidden" name="asin" value="{{ asin or '' }}">
+
+                    <div class="mb-3">
+                        <label class="form-label">Seller SKU</label>
+                        <input type="text" class="form-control" name="sku" value="{{ sku or '' }}" required>
+                    </div>
+
+                    <div class="alert alert-info">
+                        Select only the product attributes you want to update. Each value must stay in Amazon's JSON attribute format.
+                    </div>
+
+                    {% for attribute_name, attribute_value in product_attributes|dictsort %}
+                    <div class="border rounded p-3 mb-3">
+                        <div class="form-check mb-2">
+                            <input class="form-check-input advanced-attribute-toggle" type="checkbox" name="attribute_keys" value="{{ attribute_name }}" id="attr-{{ loop.index }}">
+                            <label class="form-check-label fw-semibold" for="attr-{{ loop.index }}">{{ attribute_name }}</label>
+                        </div>
+                        <textarea class="form-control advanced-attribute-input d-none" rows="6" name="attr_json__{{ attribute_name }}">{{ attribute_value|tojson(indent=2) }}</textarea>
+                    </div>
+                    {% endfor %}
+
+                    <button type="submit" class="btn btn-dark">Update Selected Product Attributes</button>
+                </form>
+                {% else %}
+                <p class="text-muted mb-0">Load a listing first to inspect and edit its full Amazon attributes.</p>
+                {% endif %}
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -225,5 +263,12 @@ document.querySelectorAll('.content-field').forEach((el) => {
 });
 
 syncContentFields();
+
+document.querySelectorAll('.advanced-attribute-toggle').forEach((el) => {
+    el.addEventListener('change', function() {
+        const textarea = this.closest('.border').querySelector('.advanced-attribute-input');
+        textarea.classList.toggle('d-none', !this.checked);
+    });
+});
 </script>
 {% endblock %}

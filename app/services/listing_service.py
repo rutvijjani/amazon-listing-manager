@@ -283,6 +283,61 @@ class ListingService:
                 }}
             )
             raise
+
+    def update_attributes(self, sku, data):
+        """
+        Update arbitrary top-level listing attributes using the JSON structure
+        expected by the Listings Items PATCH API.
+        """
+        if not self.is_connected():
+            raise Exception("Amazon account not connected")
+
+        log_data = {
+            'user_id': self.user.id,
+            'sku': sku,
+            'operation': 'UPDATE_ATTRIBUTES',
+            'status': 'PENDING',
+            'request_payload': data,
+            'created_at': datetime.utcnow()
+        }
+        log_id = mongo.db.update_logs.insert_one(log_data).inserted_id
+
+        try:
+            patches = []
+            for attribute_name, attribute_value in data.items():
+                patches.append({
+                    'op': 'replace',
+                    'path': f'/attributes/{attribute_name}',
+                    'value': attribute_value
+                })
+
+            result = self.client.patch_listings_item(
+                self.connection.seller_id,
+                sku,
+                patches
+            )
+
+            mongo.db.update_logs.update_one(
+                {'_id': log_id},
+                {'$set': {
+                    'status': 'SUCCESS',
+                    'response_payload': result,
+                    'completed_at': datetime.utcnow()
+                }}
+            )
+
+            return result
+
+        except Exception as e:
+            mongo.db.update_logs.update_one(
+                {'_id': log_id},
+                {'$set': {
+                    'status': 'FAILED',
+                    'error_message': str(e),
+                    'completed_at': datetime.utcnow()
+                }}
+            )
+            raise
     
     def bulk_update_from_csv(self, csv_data, operation_type):
         """
@@ -386,6 +441,7 @@ class ListingService:
             'brand': str(brand),
             'main_image': main_image,
             'product_type': product_type or 'N/A',
+            'attributes': attributes,
         }
         
         if detailed:
@@ -428,5 +484,7 @@ class ListingService:
             'status': summaries.get('status', []),
             'price': price_info,
             'inventory': inventory,
-            'issues': item.get('issues', [])
+            'issues': item.get('issues', []),
+            'attributes': attributes,
+            'product_type': summaries.get('productType', 'N/A')
         }

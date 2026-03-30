@@ -26,6 +26,7 @@
                             <option value="price">Price Update</option>
                             <option value="inventory">Inventory Update</option>
                             <option value="content">Content Update</option>
+                            <option value="attributes">Attributes Update</option>
                         </select>
                     </div>
 
@@ -119,6 +120,10 @@
                        class="list-group-item list-group-item-action">
                         <i class="bi bi-file-earmark-spreadsheet"></i> Content Update Template
                     </a>
+                    <a href="{{ url_for('listings.download_template', operation_type='attributes') }}" 
+                       class="list-group-item list-group-item-action">
+                        <i class="bi bi-file-earmark-spreadsheet"></i> Attributes Update Template
+                    </a>
                 </div>
             </div>
         </div>
@@ -157,6 +162,9 @@
                     
                     <dt>fulfillment_channel</dt>
                     <dd>DEFAULT (FBM) or AMAZON (FBA)</dd>
+
+                    <dt>attributes_json</dt>
+                    <dd>JSON object of top-level Amazon attributes for generic attribute updates</dd>
                 </dl>
             </div>
         </div>
@@ -272,6 +280,14 @@ document.getElementById('operation_type').addEventListener('change', function() 
         ` : `
             <code class="d-block mb-2">sku,title,description,bullet_points,search_terms</code>
             <small class="text-muted">SKU001,Product Title,Description,Point 1|Point 2,new keyword|another keyword</small>
+        `;
+    } else if (type === 'attributes') {
+        preview.innerHTML = identifierType === 'asin' ? `
+            <code class="d-block mb-2">asin,sku,attributes_json</code>
+            <small class="text-muted">B0XXXXXXX,SKU001,{"item_name":[{"value":"Updated title","marketplace_id":"A21TJRUUN4KGV"}]}</small>
+        ` : `
+            <code class="d-block mb-2">sku,attributes_json</code>
+            <small class="text-muted">SKU001,{"item_name":[{"value":"Updated title","marketplace_id":"A21TJRUUN4KGV"}]}</small>
         `;
     }
 });

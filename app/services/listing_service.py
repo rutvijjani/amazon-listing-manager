@@ -19,6 +19,7 @@ class ListingService:
     def __init__(self, user):
         self.user = user
         self.connection = user.get_active_connection()
+        self._sku_connection_cache = {}
         if self.connection:
             current_app.logger.info(
                 f"ListingService: Connection found - Marketplace: {self.connection.marketplace_id}"
@@ -26,6 +27,43 @@ class ListingService:
         else:
             current_app.logger.warning("ListingService: No active connection found")
         self.client = SPAPIClient(connection=self.connection) if self.connection else None
+
+    def _client_for_connection(self, connection):
+        return SPAPIClient(connection=connection) if connection else None
+
+    def _resolve_connection_for_sku(self, sku):
+        """Find the connected seller account that owns the given SKU."""
+        if not sku:
+            raise Exception("SKU is required")
+
+        cached = self._sku_connection_cache.get(sku)
+        if cached:
+            return cached
+
+        connections = self.user.get_amazon_connections()
+        if not connections:
+            raise Exception("Amazon account not connected")
+
+        last_error = None
+        for connection in connections:
+            try:
+                client = self._client_for_connection(connection)
+                client.get_listings_item(connection.seller_id, sku)
+                self._sku_connection_cache[sku] = connection
+                return connection
+            except Exception as exc:
+                last_error = exc
+                current_app.logger.info(
+                    "SKU %s not found for seller %s in marketplace %s: %s",
+                    sku,
+                    connection.seller_id,
+                    connection.marketplace_id,
+                    exc,
+                )
+
+        if last_error:
+            raise last_error
+        raise Exception(f"SKU '{sku}' not found in any connected seller account")
 
     def is_connected(self):
         """Check if user has active Amazon connection."""
@@ -74,8 +112,17 @@ class ListingService:
             raise Exception("Amazon account not connected")
 
         try:
-            result = self.client.get_listings_item(self.connection.seller_id, sku)
-            return self._format_listing_item(result)
+            connection = self._resolve_connection_for_sku(sku)
+            client = self._client_for_connection(connection)
+            result = client.get_listings_item(connection.seller_id, sku)
+            formatted = self._format_listing_item(result)
+            formatted["resolved_connection"] = {
+                "seller_id": connection.seller_id,
+                "marketplace_id": connection.marketplace_id,
+                "marketplace_name": connection.marketplace_name,
+                "connection_id": connection.id,
+            }
+            return formatted
         except Exception as e:
             current_app.logger.error(f"Get listing failed: {e}")
             raise
@@ -97,9 +144,11 @@ class ListingService:
         )
 
         try:
+            connection = self._resolve_connection_for_sku(sku)
+            client = self._client_for_connection(connection)
             product_type = self.resolve_product_type_for_sku(sku)
-            result = self.client.update_price(
-                self.connection.seller_id,
+            result = client.update_price(
+                connection.seller_id,
                 sku,
                 price,
                 currency,
@@ -124,6 +173,8 @@ class ListingService:
         )
 
         try:
+            connection = self._resolve_connection_for_sku(sku)
+            client = self._client_for_connection(connection)
             product_type = self.resolve_product_type_for_sku(sku)
             patches = []
 
@@ -131,19 +182,19 @@ class ListingService:
                 patches.append({
                     'op': 'replace',
                     'path': '/attributes/item_name',
-                    'value': [{'value': data['title'], 'marketplace_id': self.connection.marketplace_id}],
+                    'value': [{'value': data['title'], 'marketplace_id': connection.marketplace_id}],
                 })
 
             if 'description' in data:
                 patches.append({
                     'op': 'replace',
                     'path': '/attributes/product_description',
-                    'value': [{'value': data['description'], 'marketplace_id': self.connection.marketplace_id}],
+                    'value': [{'value': data['description'], 'marketplace_id': connection.marketplace_id}],
                 })
 
             if 'bullet_points' in data:
                 bullets = [
-                    {'value': bullet, 'marketplace_id': self.connection.marketplace_id}
+                    {'value': bullet, 'marketplace_id': connection.marketplace_id}
                     for bullet in data['bullet_points']
                 ]
                 patches.append({
@@ -153,15 +204,15 @@ class ListingService:
                 })
 
             if 'search_terms' in data:
-                terms = [{'value': ' '.join(data['search_terms']), 'marketplace_id': self.connection.marketplace_id}]
+                terms = [{'value': ' '.join(data['search_terms']), 'marketplace_id': connection.marketplace_id}]
                 patches.append({
                     'op': 'replace',
                     'path': '/attributes/generic_keyword',
                     'value': terms,
                 })
 
-            result = self.client.patch_listings_item(
-                self.connection.seller_id,
+            result = client.patch_listings_item(
+                connection.seller_id,
                 sku,
                 patches,
                 product_type=product_type,
@@ -184,6 +235,8 @@ class ListingService:
         )
 
         try:
+            connection = self._resolve_connection_for_sku(sku)
+            client = self._client_for_connection(connection)
             product_type = self.resolve_product_type_for_sku(sku)
             patches = []
             for attribute_name, attribute_value in data.items():
@@ -193,8 +246,8 @@ class ListingService:
                     'value': attribute_value,
                 })
 
-            result = self.client.patch_listings_item(
-                self.connection.seller_id,
+            result = client.patch_listings_item(
+                connection.seller_id,
                 sku,
                 patches,
                 product_type=product_type,

@@ -66,6 +66,15 @@
                         <td><strong>SKU</strong></td>
                         <td><code>{{ sku or product.sku or 'Enter manually' }}</code></td>
                     </tr>
+                    {% if listing and listing.resolved_connection %}
+                    <tr>
+                        <td><strong>Resolved Account</strong></td>
+                        <td>
+                            <span class="badge bg-success">{{ listing.resolved_connection.marketplace_name }}</span>
+                            <code>{{ listing.resolved_connection.seller_id }}</code>
+                        </td>
+                    </tr>
+                    {% endif %}
                     <tr>
                         <td><strong>Title</strong></td>
                         <td>{{ product.title or 'Untitled product' }}</td>

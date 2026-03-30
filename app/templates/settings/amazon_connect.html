@@ -6,16 +6,16 @@
 <div class="row mb-4">
     <div class="col-lg-8">
         <h2><i class="bi bi-gear"></i> Amazon Settings</h2>
-        <p class="text-muted mb-0">Connect and manage multiple marketplace accounts. One marketplace stays selected as your active working context.</p>
+        <p class="text-muted mb-0">Connect and manage multiple seller accounts, including multiple accounts inside the same marketplace. One account stays selected as your active working context.</p>
     </div>
     <div class="col-lg-4">
         <div class="card border-info">
             <div class="card-body">
                 <h6 class="mb-2"><i class="bi bi-compass"></i> Process</h6>
                 <ol class="small mb-0">
-                    <li>Connect a marketplace using refresh token or OAuth</li>
-                    <li>Repeat for the next marketplace</li>
-                    <li>Use “Set Active” before searching or updating listings</li>
+                    <li>Connect a seller account using refresh token or OAuth</li>
+                    <li>Repeat for the next account, even in the same marketplace</li>
+                    <li>Use "Set Active" before searching or updating listings</li>
                 </ol>
             </div>
         </div>
@@ -26,7 +26,7 @@
     <div class="col-md-8">
         <div class="card mb-4">
             <div class="card-header bg-primary text-white">
-                <i class="bi bi-link-45deg"></i> Connected Marketplaces
+                <i class="bi bi-link-45deg"></i> Connected Seller Accounts
             </div>
             <div class="card-body">
                 {% if connections %}
@@ -35,6 +35,7 @@
                         <thead class="table-light">
                             <tr>
                                 <th>Marketplace</th>
+                                <th>Account</th>
                                 <th>Seller ID</th>
                                 <th>Status</th>
                                 <th>Actions</th>
@@ -46,6 +47,10 @@
                                 <td>
                                     <div class="fw-semibold">{{ conn.marketplace_name }}</div>
                                     <div class="small text-muted"><code>{{ conn.marketplace_id }}</code></div>
+                                </td>
+                                <td>
+                                    <div class="fw-semibold">Seller Account</div>
+                                    <div class="small text-muted">Connection {{ loop.index }}</div>
                                 </td>
                                 <td><code>{{ conn.seller_id }}</code></td>
                                 <td>
@@ -59,13 +64,13 @@
                                     {% if not conn.is_selected %}
                                     <form method="POST" action="{{ url_for('auth.select_marketplace') }}" class="d-inline">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <input type="hidden" name="marketplace_id" value="{{ conn.marketplace_id }}">
+                                        <input type="hidden" name="connection_id" value="{{ conn.id }}">
                                         <button type="submit" class="btn btn-sm btn-outline-primary">Set Active</button>
                                     </form>
                                     {% endif %}
-                                    <form method="POST" action="{{ url_for('auth.amazon_disconnect') }}" class="d-inline" onsubmit="return confirm('Disconnect this marketplace?');">
+                                    <form method="POST" action="{{ url_for('auth.amazon_disconnect') }}" class="d-inline" onsubmit="return confirm('Disconnect this seller account?');">
                                         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                                        <input type="hidden" name="marketplace_id" value="{{ conn.marketplace_id }}">
+                                        <input type="hidden" name="connection_id" value="{{ conn.id }}">
                                         <button type="submit" class="btn btn-sm btn-outline-danger">Disconnect</button>
                                     </form>
                                 </td>
@@ -76,7 +81,7 @@
                 </div>
                 {% else %}
                 <div class="alert alert-warning mb-0">
-                    <strong>No marketplace connected yet.</strong> Start with your first marketplace below.
+                    <strong>No seller account connected yet.</strong> Start with your first account below.
                 </div>
                 {% endif %}
             </div>
@@ -84,13 +89,13 @@
 
         <div class="card mb-4">
             <div class="card-header">
-                <i class="bi bi-pencil-square"></i> Update Seller ID For Active Marketplace
+                <i class="bi bi-pencil-square"></i> Update Seller ID For Active Account
             </div>
             <div class="card-body">
                 {% if connection %}
                 <form method="POST" action="{{ url_for('auth.update_seller_id') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                    <input type="hidden" name="marketplace_id" value="{{ connection.marketplace_id }}">
+                    <input type="hidden" name="connection_id" value="{{ connection.id }}">
                     <div class="input-group">
                         <span class="input-group-text">{{ connection.marketplace_name }}</span>
                         <input type="text" class="form-control" name="seller_id" value="{{ connection.seller_id if connection.seller_id != 'pending' else '' }}" placeholder="Enter Seller ID" required>
@@ -98,18 +103,18 @@
                     </div>
                 </form>
                 {% else %}
-                <div class="text-muted">Connect a marketplace first.</div>
+                <div class="text-muted">Connect a seller account first.</div>
                 {% endif %}
             </div>
         </div>
 
         <div class="card mb-4">
             <div class="card-header bg-light">
-                <i class="bi bi-key"></i> Connect Marketplace Using Refresh Token
+                <i class="bi bi-key"></i> Connect Seller Account Using Refresh Token
             </div>
             <div class="card-body">
                 <div class="alert alert-info">
-                    Best for private or draft SP-API apps. You can reuse the same refresh token for more marketplaces if Amazon has already authorized that seller account there.
+                    Best for private or draft SP-API apps. You can add more than one seller account inside the same marketplace by entering a different seller ID here.
                 </div>
                 <form method="POST" action="{{ url_for('auth.amazon_direct_connect') }}">
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -123,14 +128,14 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Seller ID</label>
-                        <input type="text" class="form-control" name="seller_id" required placeholder="Enter the seller ID for this marketplace">
+                        <input type="text" class="form-control" name="seller_id" required placeholder="Enter the seller ID for this seller account">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Refresh Token</label>
                         <textarea class="form-control" name="refresh_token" rows="4" required placeholder="Paste the refresh token here"></textarea>
                     </div>
                     <button type="submit" class="btn btn-dark">
-                        <i class="bi bi-plug"></i> Connect Marketplace
+                        <i class="bi bi-plug"></i> Connect Seller Account
                     </button>
                 </form>
             </div>
@@ -138,7 +143,7 @@
 
         <div class="card">
             <div class="card-header">
-                <i class="bi bi-globe"></i> Connect Marketplace Using OAuth
+                <i class="bi bi-globe"></i> Connect Seller Account Using OAuth
             </div>
             <div class="card-body">
                 <div class="alert alert-info">
@@ -163,19 +168,20 @@
                 <i class="bi bi-question-circle"></i> Guide
             </div>
             <div class="card-body">
-                <h6>Recommended process for 2 more marketplaces</h6>
+                <h6>Recommended process for more accounts</h6>
                 <ol class="small">
-                    <li>Keep your current India marketplace connected.</li>
-                    <li>Connect marketplace 2 with its marketplace ID + seller ID.</li>
-                    <li>Connect marketplace 3 the same way.</li>
-                    <li>Switch active marketplace before searching or editing listings.</li>
+                    <li>Keep your current active account connected.</li>
+                    <li>Add the next seller account with marketplace + seller ID.</li>
+                    <li>Repeat for more accounts, even in the same marketplace.</li>
+                    <li>Switch active account before searching or editing listings.</li>
                 </ol>
                 <hr>
                 <h6>Important notes</h6>
                 <ul class="small mb-0">
-                    <li>Listings/search/update always run against the active marketplace.</li>
+                    <li>Listings/search/update always run against the active seller account.</li>
+                    <li>Same marketplace can now have multiple seller IDs.</li>
                     <li>Different regions can require different seller IDs or authorizations.</li>
-                    <li>If Amazon returns product-type errors, load the item again after switching marketplace.</li>
+                    <li>If Amazon returns product-type errors, load the item again after switching account.</li>
                 </ul>
             </div>
         </div>

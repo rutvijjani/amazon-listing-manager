@@ -19,101 +19,100 @@ class SmokeTests(unittest.TestCase):
             getattr(fake_db, collection_name).docs = []
 
     def test_health_endpoint(self):
-        response = self.client.get("/health")
+        response = self.client.get('/health')
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json, {"status": "ok"})
+        self.assertEqual(response.json, {'status': 'ok'})
 
     def test_register_and_login_flow(self):
         response = login_test_user(self.client)
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Welcome back", response.data)
+        self.assertIn(b'Welcome back', response.data)
 
     def test_invite_required_after_first_user(self):
-        login_test_user(self.client, email="owner@example.com")
-        self.client.get("/auth/logout", follow_redirects=True)
-        invite = Invitation({"email": "member@example.com", "invited_by_user_id": "owner-id"}).save()
+        login_test_user(self.client, email='owner@example.com')
+        self.client.get('/auth/logout', follow_redirects=True)
+        invite = Invitation({'email': 'member@example.com', 'invited_by_user_id': 'owner-id'}).save()
 
         denied = self.client.post(
-            "/auth/register",
+            '/auth/register',
             data={
-                "name": "Blocked User",
-                "email": "blocked@example.com",
-                "password": "secret123",
-                "confirm_password": "secret123",
+                'name': 'Blocked User',
+                'email': 'blocked@example.com',
+                'password': 'secret123',
+                'confirm_password': 'secret123',
             },
             follow_redirects=True,
         )
-        self.assertIn(b"invitation link is required", denied.data)
+        self.assertIn(b'invitation link is required', denied.data)
 
         allowed = self.client.post(
-            "/auth/register",
+            '/auth/register',
             data={
-                "name": "Invited User",
-                "email": "member@example.com",
-                "password": "secret123",
-                "confirm_password": "secret123",
-                "invite_token": invite.token,
+                'name': 'Invited User',
+                'email': 'member@example.com',
+                'password': 'secret123',
+                'confirm_password': 'secret123',
+                'invite_token': invite.token,
             },
             follow_redirects=True,
         )
-        self.assertIn(b"Registration successful", allowed.data)
+        self.assertIn(b'Registration successful', allowed.data)
 
     def test_amazon_settings_page_renders_for_logged_in_user(self):
         login_test_user(self.client)
-        response = self.client.get("/settings/amazon")
+        response = self.client.get('/settings/amazon')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Amazon Settings", response.data)
+        self.assertIn(b'Amazon Settings', response.data)
 
-    def test_multiple_marketplaces_render_and_selected_connection_is_used(self):
+    def test_multiple_accounts_same_marketplace_render_and_selected_connection_is_used(self):
         login_test_user(self.client)
         attach_connection()
         fake_db = app_module.mongo.db
         user = fake_db.users.docs[0]
         app_module.mongo.db.amazon_connections.insert_one({
-            "user_id": str(user["_id"]),
-            "seller_id": "SELLER-US",
-            "marketplace_id": "ATVPDKIKX0DER",
-            "marketplace_name": "United States",
-            "refresh_token_encrypted": "encrypted-token-us",
-            "is_active": True,
-            "is_selected": False,
+            'user_id': str(user['_id']),
+            'seller_id': 'SELLER-INDIA-2',
+            'marketplace_id': 'A21TJRUUN4KGV',
+            'marketplace_name': 'India',
+            'refresh_token_encrypted': 'encrypted-token-india-2',
+            'is_active': True,
+            'is_selected': False,
         })
-        response = self.client.get("/settings/amazon")
+        response = self.client.get('/settings/amazon')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Connected Marketplaces", response.data)
-        self.assertIn(b"United States", response.data)
-        self.assertIn(b"India", response.data)
+        self.assertIn(b'Connected Seller Accounts', response.data)
+        self.assertIn(b'SELLER123', response.data)
+        self.assertIn(b'SELLER-INDIA-2', response.data)
 
     def test_manual_update_page_renders_for_connected_user(self):
         login_test_user(self.client)
         attach_connection()
-        response = self.client.get("/listings/manual-update")
+        response = self.client.get('/listings/manual-update')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Manual Listing Update", response.data)
-        self.assertNotIn(b"Inventory Update", response.data)
+        self.assertIn(b'Manual Listing Update', response.data)
+        self.assertNotIn(b'Inventory Update', response.data)
 
     def test_bulk_update_page_renders_for_connected_user(self):
         login_test_user(self.client)
         attach_connection()
-        response = self.client.get("/listings/bulk-update")
+        response = self.client.get('/listings/bulk-update')
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Bulk Update", response.data)
-        self.assertNotIn(b"Inventory Update", response.data)
+        self.assertIn(b'Bulk Update', response.data)
+        self.assertNotIn(b'Inventory Update', response.data)
 
     def test_search_route_handles_service_failure_gracefully(self):
         login_test_user(self.client)
         attach_connection()
 
         def boom(self, keywords=None, asins=None, page_size=20):
-            raise Exception("search unavailable")
+            raise Exception('search unavailable')
 
-        with patch.object(ListingService, "search_items", boom):
-            response = self.client.get("/listings/search?type=asin&q=B0TESTASIN")
+        with patch.object(ListingService, 'search_items', boom):
+            response = self.client.get('/listings/search?type=asin&q=B0TESTASIN')
 
         self.assertEqual(response.status_code, 200)
-        self.assertIn(b"Search failed: search unavailable", response.data)
+        self.assertIn(b'Search failed: search unavailable', response.data)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     unittest.main(verbosity=2)
-

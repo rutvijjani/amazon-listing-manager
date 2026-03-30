@@ -12,7 +12,7 @@ class FakeCursor:
 
     def sort(self, key, direction):
         reverse = direction == -1
-        self.docs.sort(key=lambda doc: doc.get(key), reverse=reverse)
+        self.docs.sort(key=lambda doc: (doc.get(key) is None, doc.get(key)), reverse=reverse)
         return self
 
     def limit(self, n):
@@ -39,7 +39,7 @@ class FakeCollection:
             if isinstance(value, dict):
                 doc_value = doc.get(key)
                 for operator, operand in value.items():
-                    if operator == "$gt":
+                    if operator == '$gt':
                         if not (doc_value and doc_value > operand):
                             return False
                     else:
@@ -59,18 +59,18 @@ class FakeCollection:
 
     def insert_one(self, data):
         doc = data.copy()
-        doc.setdefault("_id", ObjectId())
+        doc.setdefault('_id', ObjectId())
         self.docs.append(doc)
-        return SimpleNamespace(inserted_id=doc["_id"])
+        return SimpleNamespace(inserted_id=doc['_id'])
 
     def update_one(self, query, update):
         modified = 0
         for doc in self.docs:
             if self._matches(doc, query):
                 for op, values in update.items():
-                    if op == "$set":
+                    if op == '$set':
                         doc.update(values)
-                    elif op == "$inc":
+                    elif op == '$inc':
                         for key, value in values.items():
                             doc[key] = doc.get(key, 0) + value
                 modified = 1
@@ -82,7 +82,7 @@ class FakeCollection:
         for doc in self.docs:
             if self._matches(doc, query):
                 for op, values in update.items():
-                    if op == "$set":
+                    if op == '$set':
                         doc.update(values)
                 modified += 1
         return SimpleNamespace(modified_count=modified)
@@ -92,7 +92,7 @@ class FakeCollection:
             if self._matches(doc, query):
                 original = doc.copy()
                 for op, values in update.items():
-                    if op == "$set":
+                    if op == '$set':
                         doc.update(values)
                 return original
         return None
@@ -122,45 +122,43 @@ def build_test_app():
     test_app.config.update(
         TESTING=True,
         WTF_CSRF_ENABLED=False,
-        SECRET_KEY="test-secret",
-        TOKEN_ENCRYPTION_KEY="3r1m3sj3tkfCBY0xWm5gQ8m4eQ8PwWnN7TqLz7x5WvM=",
+        SECRET_KEY='test-secret',
+        TOKEN_ENCRYPTION_KEY='3r1m3sj3tkfCBY0xWm5gQ8m4eQ8PwWnN7TqLz7x5WvM=',
     )
     return test_app
 
 
-def login_test_user(client, email="qa@example.com", password="secret123"):
+def login_test_user(client, email='qa@example.com', password='secret123'):
     client.post(
-        "/auth/register",
+        '/auth/register',
         data={
-            "name": "QA User",
-            "email": email,
-            "password": password,
-            "confirm_password": password,
+            'name': 'QA User',
+            'email': email,
+            'password': password,
+            'confirm_password': password,
         },
         follow_redirects=True,
     )
     return client.post(
-        "/auth/login",
-        data={"email": email, "password": password},
+        '/auth/login',
+        data={'email': email, 'password': password},
         follow_redirects=True,
     )
 
 
-def attach_connection(email="qa@example.com"):
+def attach_connection(email='qa@example.com'):
     user = User.find_by_email(email)
     assert user is not None
     connection = AmazonConnection(
         {
-            "user_id": user.id,
-            "seller_id": "SELLER123",
-            "marketplace_id": "A21TJRUUN4KGV",
-            "marketplace_name": "India",
-            "refresh_token_encrypted": "encrypted-token",
-            "is_active": True,
+            'user_id': user.id,
+            'seller_id': 'SELLER123',
+            'marketplace_id': 'A21TJRUUN4KGV',
+            'marketplace_name': 'India',
+            'refresh_token_encrypted': 'encrypted-token',
+            'is_active': True,
+            'is_selected': True,
         }
     )
     connection.save()
     return user
-
-
-

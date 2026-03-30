@@ -19,33 +19,12 @@ bp = Blueprint('auth', __name__)
 
 def _clear_selected_marketplaces(user_id):
     """Clear the selected flag without relying on model helper availability."""
-    AmazonConnection.get_collection().update_many(
-        {'user_id': user_id, 'is_active': True, 'is_selected': True},
-        {'$set': {'is_selected': False, 'updated_at': datetime.now(UTC)}}
-    )
+    AmazonConnection.clear_selected_for_user(user_id)
 
 
-def _upsert_marketplace_connection(user_id, marketplace_id, defaults):
-    """Upsert a marketplace connection directly through the collection."""
-    collection = AmazonConnection.get_collection()
-    existing = collection.find_one({
-        'user_id': user_id,
-        'marketplace_id': marketplace_id
-    })
-
-    payload = {
-        **defaults,
-        'user_id': user_id,
-        'marketplace_id': marketplace_id,
-        'updated_at': datetime.now(UTC),
-    }
-
-    if existing:
-        collection.update_one({'_id': existing['_id']}, {'$set': payload})
-        return
-
-    payload.setdefault('created_at', datetime.now(UTC))
-    collection.insert_one(payload)
+def _save_marketplace_account(user_id, marketplace_id, seller_id, defaults):
+    """Create or update one seller account connection."""
+    return AmazonConnection.upsert_account(user_id, marketplace_id, seller_id, defaults)
 
 
 def _register_invite_context():
@@ -287,9 +266,9 @@ def amazon_callback():
         expires_in = token_data.get('expires_in')
         selling_partner_id = request.args.get('selling_partner_id') or session.get('oauth_selling_partner_id')
         
+        seller_id = selling_partner_id or 'pending'
         _clear_selected_marketplaces(current_user.id)
-        _upsert_marketplace_connection(current_user.id, marketplace_id, {
-            'seller_id': selling_partner_id or 'pending',
+        _save_marketplace_account(current_user.id, marketplace_id, seller_id, {
             'marketplace_name': marketplace_name,
             'refresh_token_encrypted': encryption.encrypt(token_data['refresh_token']),
             'access_token_encrypted': encryption.encrypt(token_data.get('access_token')),
@@ -318,26 +297,26 @@ def amazon_callback():
 @login_required
 def amazon_disconnect():
     """Disconnect Amazon account"""
-    marketplace_id = request.form.get('marketplace_id', '').strip()
+    connection_id = request.form.get('connection_id', '').strip()
     collection = AmazonConnection.get_collection()
-    was_selected = False
-    if marketplace_id:
-        existing = collection.find_one({'user_id': current_user.id, 'marketplace_id': marketplace_id, 'is_active': True})
-        was_selected = bool(existing and existing.get('is_selected'))
-    query = {'user_id': current_user.id, 'is_active': True}
-    if marketplace_id:
-        query['marketplace_id'] = marketplace_id
+    connection = current_user.get_connection_by_id(connection_id)
+    if not connection:
+        flash('Connection not found.', 'warning')
+        return redirect(url_for('dashboard.amazon_settings'))
 
     result = collection.update_many(
-        query,
-        {'$set': {'is_active': False}}
+        {'_id': connection._id, 'user_id': current_user.id, 'is_active': True},
+        {'$set': {'is_active': False, 'is_selected': False, 'updated_at': datetime.now(UTC)}}
     )
     
     if result.modified_count > 0:
-        if was_selected:
+        if connection.is_selected:
             fallback = collection.find_one({'user_id': current_user.id, 'is_active': True})
             if fallback:
-                collection.update_one({'_id': fallback['_id']}, {'$set': {'is_selected': True}})
+                collection.update_one(
+                    {'_id': fallback['_id']},
+                    {'$set': {'is_selected': True, 'updated_at': datetime.now(UTC)}}
+                )
         flash('Amazon account disconnected.', 'info')
     else:
         flash('No Amazon account connected.', 'warning')
@@ -364,8 +343,7 @@ def amazon_direct_connect():
     try:
         encryption = TokenEncryption()
         _clear_selected_marketplaces(current_user.id)
-        _upsert_marketplace_connection(current_user.id, marketplace_id, {
-            'seller_id': seller_id,
+        _save_marketplace_account(current_user.id, marketplace_id, seller_id, {
             'marketplace_name': AmazonOAuth.get_marketplace_name(marketplace_id),
             'refresh_token_encrypted': encryption.encrypt(refresh_token),
             'access_token_encrypted': None,
@@ -387,16 +365,20 @@ def amazon_direct_connect():
 def update_seller_id():
     """Update seller ID for connected account"""
     seller_id = request.form.get('seller_id', '').strip()
+    connection_id = request.form.get('connection_id', '').strip()
     
     if not seller_id:
         flash('Seller ID is required', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))
     
     collection = AmazonConnection.get_collection()
-    marketplace_id = request.form.get('marketplace_id', '').strip()
     query = {'user_id': current_user.id, 'is_active': True}
-    if marketplace_id:
-        query['marketplace_id'] = marketplace_id
+    if connection_id:
+        connection = current_user.get_connection_by_id(connection_id)
+        if not connection:
+            flash('Connection not found', 'danger')
+            return redirect(url_for('dashboard.amazon_settings'))
+        query['_id'] = connection._id
     else:
         query['is_selected'] = True
 
@@ -417,12 +399,12 @@ def update_seller_id():
 @login_required
 def select_marketplace():
     """Switch the currently selected marketplace connection."""
-    marketplace_id = request.form.get('marketplace_id', '').strip()
-    if not marketplace_id:
-        flash('Marketplace is required', 'danger')
+    connection_id = request.form.get('connection_id', '').strip()
+    if not connection_id:
+        flash('Connection is required', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))
 
-    connection = current_user.get_active_connection(marketplace_id=marketplace_id)
+    connection = current_user.get_connection_by_id(connection_id)
     if not connection:
         flash('Marketplace connection not found', 'danger')
         return redirect(url_for('dashboard.amazon_settings'))

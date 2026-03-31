@@ -239,7 +239,8 @@ def item_detail(asin):
         return redirect(url_for('dashboard.amazon_settings'))
 
     try:
-        item = service.get_item_details(asin)
+        connection_id = request.args.get('connection_id', '').strip() or None
+        item = service.get_item_details(asin, connection_id=connection_id)
         return render_template('listings/detail.html', item=item, asin=asin)
     except Exception as e:
         flash(f'Failed to get item details: {str(e)}', 'danger')
@@ -262,6 +263,7 @@ def manual_update():
 
     asin = request.values.get('asin', '').strip()
     sku = request.values.get('sku', '').strip()
+    connection_id = request.values.get('connection_id', '').strip() or None
     listing = {}
     catalog_item = None
 
@@ -275,7 +277,7 @@ def manual_update():
 
     if asin and not listing.get('title'):
         try:
-            catalog_item = service.get_item_details(asin)
+            catalog_item = service.get_item_details(asin, connection_id=connection_id)
         except Exception as e:
             flash(f'Could not load catalog item by ASIN: {str(e)}', 'warning')
 

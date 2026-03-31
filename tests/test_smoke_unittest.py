@@ -2,7 +2,7 @@ import unittest
 from unittest.mock import patch
 
 import app as app_module
-from app.models import AmazonConnection, Invitation
+from app.models import AmazonConnection, Invitation, User
 from app.services.listing_service import ListingService
 from tests.smoke_support import attach_connection, build_test_app, login_test_user
 
@@ -83,6 +83,44 @@ class SmokeTests(unittest.TestCase):
         self.assertIn(b'Connected Seller Accounts', response.data)
         self.assertIn(b'SELLER123', response.data)
         self.assertIn(b'SELLER-INDIA-2', response.data)
+
+    def test_search_uses_working_account_when_another_account_fails(self):
+        login_test_user(self.client)
+        user = attach_connection()
+        app_module.mongo.db.amazon_connections.insert_one({
+            'user_id': user.id,
+            'seller_id': 'SELLER-FAIL',
+            'marketplace_id': 'A21TJRUUN4KGV',
+            'marketplace_name': 'India',
+            'refresh_token_encrypted': 'encrypted-token-india-2',
+            'is_active': True,
+            'is_selected': False,
+        })
+
+        with self.app.app_context():
+            service = ListingService(User.find_by_email('qa@example.com'))
+
+            class FakeClient:
+                def __init__(self, seller_id):
+                    self.seller_id = seller_id
+
+                def search_catalog_items(self, keywords=None, identifiers=None, identifier_type='ASIN', page_size=20):
+                    if self.seller_id == 'SELLER-FAIL':
+                        raise Exception('unauthorized_client')
+                    return {
+                        'items': [{
+                            'asin': 'B0TESTASIN',
+                            'summaries': [{'itemName': 'Test Product', 'brandName': 'Brand', 'productType': 'PRODUCT'}],
+                            'attributes': {},
+                            'images': [],
+                        }]
+                    }
+
+            service._client_for_connection = lambda connection: FakeClient(connection.seller_id)
+            items = service.search_items(asins=['B0TESTASIN'])
+
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0]['resolved_connection']['seller_id'], 'SELLER123')
 
     def test_manual_update_page_renders_for_connected_user(self):
         login_test_user(self.client)

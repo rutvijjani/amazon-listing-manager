@@ -31,6 +31,9 @@
                 <h6>ASIN: <code>{{ item.asin }}</code></h6>
                 <p class="text-muted small">Brand: {{ item.brand }}</p>
                 <p class="text-muted small">Type: {{ item.product_type }}</p>
+                {% if item.resolved_connection %}
+                <p class="text-muted small mb-0">Resolved Account: {{ item.resolved_connection.marketplace_name }} / <code>{{ item.resolved_connection.seller_id }}</code></p>
+                {% endif %}
             </div>
         </div>
         
@@ -94,7 +97,7 @@
                     <div class="col-md-6">
                         <h6>Quick Update</h6>
                         <p class="small text-muted">Update this product's listing on Amazon</p>
-                        <a href="{{ url_for('listings.manual_update', asin=item.asin) }}" class="btn btn-primary">
+                        <a href="{{ url_for('listings.manual_update', asin=item.asin, connection_id=(item.resolved_connection.connection_id if item.resolved_connection else None)) }}" class="btn btn-primary">
                             <i class="bi bi-pencil"></i> Manual Update
                         </a>
                     </div>

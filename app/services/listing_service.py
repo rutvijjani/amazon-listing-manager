@@ -19,6 +19,7 @@ class ListingService:
     def __init__(self, user):
         self.user = user
         self.connection = user.get_active_connection()
+        self.connections = user.get_amazon_connections()
         self._sku_connection_cache = {}
         if self.connection:
             current_app.logger.info(
@@ -31,6 +32,9 @@ class ListingService:
     def _client_for_connection(self, connection):
         return SPAPIClient(connection=connection) if connection else None
 
+    def _connected_accounts(self):
+        return self.connections or []
+
     def _resolve_connection_for_sku(self, sku):
         """Find the connected seller account that owns the given SKU."""
         if not sku:
@@ -40,7 +44,7 @@ class ListingService:
         if cached:
             return cached
 
-        connections = self.user.get_amazon_connections()
+        connections = self._connected_accounts()
         if not connections:
             raise Exception("Amazon account not connected")
 
@@ -66,45 +70,92 @@ class ListingService:
         raise Exception(f"SKU '{sku}' not found in any connected seller account")
 
     def is_connected(self):
-        """Check if user has active Amazon connection."""
-        return self.client is not None
+        """Check if user has any Amazon connection."""
+        return bool(self._connected_accounts())
 
     def search_items(self, keywords=None, asins=None, page_size=20):
-        """Search catalog items."""
+        """Search catalog items across all connected seller accounts."""
         if not self.is_connected():
             raise Exception("Amazon account not connected")
 
-        try:
-            if asins:
-                result = self.client.search_catalog_items(
-                    identifiers=asins,
-                    identifier_type='ASIN',
-                    page_size=page_size,
+        aggregated = []
+        seen = set()
+        failures = []
+
+        for connection in self._connected_accounts():
+            try:
+                client = self._client_for_connection(connection)
+                if asins:
+                    result = client.search_catalog_items(
+                        identifiers=asins,
+                        identifier_type='ASIN',
+                        page_size=page_size,
+                    )
+                else:
+                    result = client.search_catalog_items(
+                        keywords=keywords,
+                        page_size=page_size,
+                    )
+
+                for item in result.get('items', []):
+                    formatted = self._format_catalog_item(
+                        item,
+                        connection=connection,
+                    )
+                    dedupe_key = (
+                        formatted.get('asin'),
+                        connection.marketplace_id,
+                        connection.seller_id,
+                    )
+                    if dedupe_key in seen:
+                        continue
+                    seen.add(dedupe_key)
+                    aggregated.append(formatted)
+            except Exception as exc:
+                failures.append(f"{connection.marketplace_name}/{connection.seller_id}: {exc}")
+                current_app.logger.warning(
+                    "Catalog search failed for %s / %s: %s",
+                    connection.marketplace_name,
+                    connection.seller_id,
+                    exc,
                 )
-            else:
-                result = self.client.search_catalog_items(
-                    keywords=keywords,
-                    page_size=page_size,
-                )
 
-            items = result.get('items', [])
-            return [self._format_catalog_item(item) for item in items]
+        if aggregated:
+            return aggregated
 
-        except Exception as e:
-            current_app.logger.error(f"Search failed: {e}")
-            raise
+        if failures:
+            raise Exception(" ; ".join(failures))
+        return []
 
-    def get_item_details(self, asin):
-        """Get detailed catalog item information."""
+    def get_item_details(self, asin, connection_id=None):
+        """Get detailed catalog item information across connected accounts."""
         if not self.is_connected():
             raise Exception("Amazon account not connected")
 
-        try:
-            result = self.client.get_catalog_item(asin)
-            return self._format_catalog_item(result, detailed=True)
-        except Exception as e:
-            current_app.logger.error(f"Get item failed: {e}")
-            raise
+        failures = []
+        connections = self._connected_accounts()
+        if connection_id:
+            specific = self.user.get_connection_by_id(connection_id)
+            connections = [specific] if specific else []
+
+        for connection in connections:
+            try:
+                client = self._client_for_connection(connection)
+                result = client.get_catalog_item(asin)
+                return self._format_catalog_item(result, detailed=True, connection=connection)
+            except Exception as exc:
+                failures.append(f"{connection.marketplace_name}/{connection.seller_id}: {exc}")
+                current_app.logger.warning(
+                    "Catalog item lookup failed for %s / %s / %s: %s",
+                    connection.marketplace_name,
+                    connection.seller_id,
+                    asin,
+                    exc,
+                )
+
+        if failures:
+            raise Exception(" ; ".join(failures))
+        raise Exception(f"ASIN '{asin}' not found in any connected seller account")
 
     def get_listing_by_sku(self, sku):
         """Get listing details by seller SKU."""
@@ -274,12 +325,15 @@ class ListingService:
             return None
 
         try:
-            definition = self.client.get_product_type_definition(product_type)
+            client = self.client
+            if not client and self._connected_accounts():
+                client = self._client_for_connection(self._connected_accounts()[0])
+            definition = client.get_product_type_definition(product_type)
         except Exception as exc:
             current_app.logger.warning(f"Could not load product type definition for {product_type}: {exc}")
             return None
 
-        schema = self.client.get_product_type_schema(definition) or {}
+        schema = client.get_product_type_schema(definition) or {}
         properties = schema.get('properties') or {}
 
         required_attributes = list(schema.get('required') or [])
@@ -334,7 +388,7 @@ class ListingService:
             }}
         )
 
-    def _format_catalog_item(self, item, detailed=False):
+    def _format_catalog_item(self, item, detailed=False, connection=None):
         """Format catalog item for display."""
         attributes = item.get('attributes', {})
         summaries = item.get('summaries', [{}])[0] if item.get('summaries') else {}
@@ -364,6 +418,14 @@ class ListingService:
             'attributes': attributes,
             'browse_classifications': item.get('classifications') or [],
         }
+
+        if connection:
+            formatted['resolved_connection'] = {
+                'seller_id': connection.seller_id,
+                'marketplace_id': connection.marketplace_id,
+                'marketplace_name': connection.marketplace_name,
+                'connection_id': connection.id,
+            }
 
         if detailed:
             description_attr = attributes.get('product_description') or [{}]

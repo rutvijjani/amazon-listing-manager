@@ -63,6 +63,8 @@
                         <th>Product</th>
                         <th>ASIN</th>
                         <th>Brand</th>
+                        <th>Marketplace</th>
+                        <th>Seller ID</th>
                         <th>Type</th>
                         <th style="width: 150px;">Actions</th>
                     </tr>
@@ -88,10 +90,24 @@
                         </td>
                         <td>{{ item.brand or 'Unknown' }}</td>
                         <td>
+                            {% if item.resolved_connection %}
+                            <span class="badge bg-light text-dark border">{{ item.resolved_connection.marketplace_name }}</span>
+                            {% else %}
+                            <span class="text-muted">Auto</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if item.resolved_connection %}
+                            <code>{{ item.resolved_connection.seller_id }}</code>
+                            {% else %}
+                            <span class="text-muted">Auto</span>
+                            {% endif %}
+                        </td>
+                        <td>
                             <span class="badge bg-info">{{ item.product_type }}</span>
                         </td>
                         <td>
-                            <a href="{{ url_for('listings.item_detail', asin=item.asin) }}" 
+                            <a href="{{ url_for('listings.item_detail', asin=item.asin, connection_id=(item.resolved_connection.connection_id if item.resolved_connection else None)) }}" 
                                class="btn btn-sm btn-outline-primary">
                                 <i class="bi bi-eye"></i> View
                             </a>

@@ -27,14 +27,14 @@
 {% else %}
 <div class="alert alert-success" role="alert">
     <i class="bi bi-check-circle-fill"></i>
-    <strong>Active Marketplace:</strong> {{ connection.marketplace_name }} 
+    <strong>Default Account:</strong> {{ connection.marketplace_name }} 
     (Seller ID: {{ connection.seller_id }})
 </div>
 {% endif %}
 
 {% if connections and connections|length > 1 %}
 <div class="alert alert-info">
-    <strong>{{ connections|length }} seller accounts connected.</strong> Use Amazon Settings to switch the active account before searching or updating listings.
+    <strong>{{ connections|length }} seller accounts connected.</strong> Search and SKU-based updates now auto-check connected accounts and route to the matching one.
 </div>
 {% endif %}
 

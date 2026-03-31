@@ -28,6 +28,7 @@
     </div>
     <div class="card-body">
         <form method="GET" action="{{ url_for('listings.manual_update') }}">
+            <input type="hidden" name="connection_id" value="{{ connection_id or '' }}">
             <div class="row g-3">
                 <div class="col-md-5">
                     <label class="form-label">ASIN</label>
@@ -155,6 +156,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="price">
                     <input type="hidden" name="asin" value="{{ asin or '' }}">
+                    <input type="hidden" name="connection_id" value="{{ connection_id or '' }}">
                     <div class="row g-3">
                         <div class="col-md-4">
                             <label class="form-label">Seller SKU</label>
@@ -194,6 +196,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="content">
                     <input type="hidden" name="asin" value="{{ asin or '' }}">
+                    <input type="hidden" name="connection_id" value="{{ connection_id or '' }}">
 
                     <div class="mb-3">
                         <label class="form-label">Seller SKU</label>
@@ -267,6 +270,7 @@
                     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <input type="hidden" name="update_type" value="attributes">
                     <input type="hidden" name="asin" value="{{ asin or '' }}">
+                    <input type="hidden" name="connection_id" value="{{ connection_id or '' }}">
 
                     <div class="mb-3">
                         <label class="form-label">Seller SKU</label>

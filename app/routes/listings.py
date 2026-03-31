@@ -267,17 +267,21 @@ def manual_update():
     listing = {}
     catalog_item = None
 
+    resolved_connection_id = connection_id
+
     if sku:
         try:
-            listing = service.get_listing_by_sku(sku)
+            listing = service.get_listing_by_sku(sku, connection_id=connection_id)
             asin = asin or (listing.get('asin') or '')
+            resolved_connection = listing.get('resolved_connection') or {}
+            resolved_connection_id = resolved_connection.get('connection_id') or resolved_connection_id
         except Exception as e:
             flash(f'Could not load listing by SKU: {str(e)}', 'warning')
             listing = {'sku': sku, 'asin': asin}
 
     if asin and not listing.get('title'):
         try:
-            catalog_item = service.get_item_details(asin, connection_id=connection_id)
+            catalog_item = service.get_item_details(asin, connection_id=resolved_connection_id or connection_id)
         except Exception as e:
             flash(f'Could not load catalog item by ASIN: {str(e)}', 'warning')
 
@@ -289,6 +293,7 @@ def manual_update():
         update_type = request.form.get('update_type')
         sku = request.form.get('sku', '').strip()
         asin = request.form.get('asin', '').strip()
+        connection_id = request.form.get('connection_id', '').strip() or resolved_connection_id or connection_id
 
         if not sku:
             flash('Seller SKU is required for updates, even when you start from ASIN.', 'danger')
@@ -299,7 +304,7 @@ def manual_update():
                     currency = request.form.get('currency', 'INR')
                     sale_price = request.form.get('sale_price', '').strip()
                     sale_price = float(sale_price) if sale_price else None
-                    service.update_price(sku, price, currency, sale_price)
+                    service.update_price(sku, price, currency, sale_price, connection_id=connection_id)
                     flash('Price updated successfully!', 'success')
 
                 elif update_type == 'content':
@@ -307,17 +312,17 @@ def manual_update():
                     if not selected_fields:
                         raise Exception('Select at least one content attribute to update')
                     data = _build_content_payload(request.form, selected_fields)
-                    service.update_content(sku, data)
+                    service.update_content(sku, data, connection_id=connection_id)
                     flash('Selected content attributes updated successfully!', 'success')
 
                 elif update_type == 'attributes':
                     if not request.form.getlist('attribute_keys'):
                         raise Exception('Select at least one product attribute to update')
                     data = _build_attribute_payload(request.form)
-                    service.update_attributes(sku, data)
+                    service.update_attributes(sku, data, connection_id=connection_id)
                     flash('Selected product attributes updated successfully!', 'success')
 
-                return redirect(url_for('listings.manual_update', sku=sku, asin=asin))
+                return redirect(url_for('listings.manual_update', sku=sku, asin=asin, connection_id=connection_id))
             except Exception as e:
                 current_app.logger.exception("Manual listing update failed")
                 flash(f'Update failed: {str(e)}', 'danger')
@@ -331,6 +336,7 @@ def manual_update():
         requirements_guide=requirements_guide,
         sku=sku,
         asin=asin,
+        connection_id=resolved_connection_id or connection_id,
     )
 
 

@@ -35,10 +35,30 @@ class ListingService:
     def _connected_accounts(self):
         return self.connections or []
 
-    def _resolve_connection_for_sku(self, sku):
+    def _get_connection_by_id(self, connection_id):
+        if not connection_id:
+            return None
+        return self.user.get_connection_by_id(connection_id)
+
+    def _resolve_connection_for_sku(self, sku, preferred_connection_id=None):
         """Find the connected seller account that owns the given SKU."""
         if not sku:
             raise Exception("SKU is required")
+
+        preferred_connection = self._get_connection_by_id(preferred_connection_id)
+        if preferred_connection:
+            try:
+                client = self._client_for_connection(preferred_connection)
+                client.get_listings_item(preferred_connection.seller_id, sku)
+                self._sku_connection_cache[sku] = preferred_connection
+                return preferred_connection
+            except Exception as exc:
+                current_app.logger.info(
+                    "Preferred connection %s could not load SKU %s: %s",
+                    preferred_connection.id,
+                    sku,
+                    exc,
+                )
 
         cached = self._sku_connection_cache.get(sku)
         if cached:
@@ -157,13 +177,13 @@ class ListingService:
             raise Exception(" ; ".join(failures))
         raise Exception(f"ASIN '{asin}' not found in any connected seller account")
 
-    def get_listing_by_sku(self, sku):
+    def get_listing_by_sku(self, sku, connection_id=None):
         """Get listing details by seller SKU."""
         if not self.is_connected():
             raise Exception("Amazon account not connected")
 
         try:
-            connection = self._resolve_connection_for_sku(sku)
+            connection = self._resolve_connection_for_sku(sku, preferred_connection_id=connection_id)
             client = self._client_for_connection(connection)
             result = client.get_listings_item(connection.seller_id, sku)
             formatted = self._format_listing_item(result)
@@ -178,7 +198,7 @@ class ListingService:
             current_app.logger.error(f"Get listing failed: {e}")
             raise
 
-    def update_price(self, sku, price, currency='INR', sale_price=None):
+    def update_price(self, sku, price, currency='INR', sale_price=None, connection_id=None):
         """Update product price."""
         if not self.is_connected():
             raise Exception("Amazon account not connected")
@@ -195,9 +215,9 @@ class ListingService:
         )
 
         try:
-            connection = self._resolve_connection_for_sku(sku)
+            connection = self._resolve_connection_for_sku(sku, preferred_connection_id=connection_id)
             client = self._client_for_connection(connection)
-            product_type = self.resolve_product_type_for_sku(sku)
+            product_type = self.resolve_product_type_for_sku(sku, connection_id=connection.id)
             result = client.update_price(
                 connection.seller_id,
                 sku,
@@ -212,7 +232,7 @@ class ListingService:
             self._mark_log_failed(log_id, e)
             raise
 
-    def update_content(self, sku, data):
+    def update_content(self, sku, data, connection_id=None):
         """Update listing content (title, description, bullets, search terms)."""
         if not self.is_connected():
             raise Exception("Amazon account not connected")
@@ -224,9 +244,9 @@ class ListingService:
         )
 
         try:
-            connection = self._resolve_connection_for_sku(sku)
+            connection = self._resolve_connection_for_sku(sku, preferred_connection_id=connection_id)
             client = self._client_for_connection(connection)
-            product_type = self.resolve_product_type_for_sku(sku)
+            product_type = self.resolve_product_type_for_sku(sku, connection_id=connection.id)
             patches = []
 
             if 'title' in data:
@@ -274,7 +294,7 @@ class ListingService:
             self._mark_log_failed(log_id, e)
             raise
 
-    def update_attributes(self, sku, data):
+    def update_attributes(self, sku, data, connection_id=None):
         """Update arbitrary top-level listing attributes."""
         if not self.is_connected():
             raise Exception("Amazon account not connected")
@@ -286,9 +306,9 @@ class ListingService:
         )
 
         try:
-            connection = self._resolve_connection_for_sku(sku)
+            connection = self._resolve_connection_for_sku(sku, preferred_connection_id=connection_id)
             client = self._client_for_connection(connection)
-            product_type = self.resolve_product_type_for_sku(sku)
+            product_type = self.resolve_product_type_for_sku(sku, connection_id=connection.id)
             patches = []
             for attribute_name, attribute_value in data.items():
                 patches.append({
@@ -309,10 +329,10 @@ class ListingService:
             self._mark_log_failed(log_id, e)
             raise
 
-    def resolve_product_type_for_sku(self, sku):
+    def resolve_product_type_for_sku(self, sku, connection_id=None):
         """Use the live listing product type when available, otherwise fall back to PRODUCT."""
         try:
-            listing = self.get_listing_by_sku(sku)
+            listing = self.get_listing_by_sku(sku, connection_id=connection_id)
         except Exception:
             return 'PRODUCT'
 
